@@ -10,6 +10,7 @@
     "test:ae": "node test/ae-export.mjs && node test/ae-mock.mjs /workspace/screw_ae_sample.zip && node test/ae-composite.mjs",
     "test:physics": "node test/physics-test.mjs",
     "test:norec": "node test/no-autorec.mjs",
+    "test:holes": "node test/hole-align-test.mjs",
     "test:3d": "E3D=1 node test/ae-export.mjs && bash test/export3d-blender.sh"
   },
   "repository": {
