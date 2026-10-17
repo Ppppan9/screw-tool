@@ -1,4 +1,5 @@
 import { levelFromImage, defaultShapeCanvas } from './shapegen.js';
+import { newBody, stepBody, toWorld as bodyToWorld } from './physics.js';
 import { referenceLevel, generateLevel, initState, holeUsable, screwFree, applyMove, pickHole, solve, done, setBlocking, platePins, coverInfo, liftOut, cancelLift } from './level.js';
 import { GROUPS, DEFS, loadSettings, saveSettings, migrate, exportJSON } from './settings.js';
 import { drawBackground, drawBase, plateSprite, drawHole, drawScrew } from './render.js';
@@ -12,7 +13,7 @@ let S = loadSettings();
 setBlocking(S.screwBlock);
 const cv = document.getElementById('stage'); let ctx = cv.getContext('2d');
 const sfx = new Sfx();
-let L, st, plateVis, screwVis, sprites, bgCanvas, baseCanvas, active = null, lastVacated = -1, autoRunning = false, autoToken = 0, endShownAt = 0, finishedAt = 0;
+let vHole = [], pend = [], L, st, plateVis, screwVis, sprites, bgCanvas, baseCanvas, active = null, lastVacated = -1, autoRunning = false, autoToken = 0, endShownAt = 0, finishedAt = 0;
 const hand = { x: 820, y: 1450, press: 0, img: null, visible: false };
 const ripples = [];
 const now = () => performance.now();
@@ -42,7 +43,7 @@ function newGame() {
   autoToken++; autoRunning = false; updAutoBtn();
   L = S.level === 'random' ? generateLevel(S, S.seed) : S.level === 'image' ? imageLevel() : referenceLevel();
   st = initState(L); active = null; lastVacated = -1; finishedAt = 0; endShownAt = 0;
-  plateVis = L.plates.map(() => ({ s: 'on', y: 0, vy: 0, rot: 0, t0: 0 }));
+  plateVis = null; vHole = st.screwHole.slice(); pend = [];
   screwVis = L.screws.map((s, i) => ({ ang: (i * 1.7) % (Math.PI / 2) - 0.3, lift: 0, sc: 1, x: 0, y: 0, anim: null }));
   rebuild(); recStart();
   status(`板 ${L.plates.length} 块，螺丝 ${L.screws.length} 颗，孔 ${L.holes.length} 个`);
@@ -53,28 +54,33 @@ function rebuild() {
   bgCanvas = document.createElement('canvas'); bgCanvas.width = cv.width; bgCanvas.height = cv.height;
   drawBackground(bgCanvas, S, cv.width, cv.height, view().k, bgImg);
   sprites = L.plates.map((p, i) => plateSprite(p, S, i, Math.max(1, dpr)));
+  if (!plateVis || plateVis.length !== L.plates.length) plateVis = L.plates.map((p, i) => newBody(p.poly, [sprites[i].x + sprites[i].w / 2, sprites[i].y + sprites[i].h / 2]));
   baseCanvas = document.createElement('canvas'); baseCanvas.width = Math.ceil(720 * dpr); baseCanvas.height = Math.ceil(1280 * dpr);
   const bc = baseCanvas.getContext('2d'); bc.scale(dpr, dpr); drawBase(bc, L, S);
 }
 
 // ---------- 动画 ----------
-function screwPos(si) { const h = L.holes[st.screwHole[si]]; return [h.x, h.y]; }
+// 孔的世界坐标：属于被摆动/移位的板时随板变换
+function holeOwner(hi) { let o = -1; L.plates.forEach((p, pi) => { const b = plateVis[pi]; if ((b.s === 'on' || b.s === 'swing') && p.holes.includes(hi) && (o < 0 || p.layer >= L.plates[o].layer)) o = pi; }); return o; }
+function holeWorld(hi) { const h = L.holes[hi], o = holeOwner(hi); if (o < 0 || !plateVis[o].posed) return [h.x, h.y]; return bodyToWorld(plateVis[o], h.x, h.y); }
+function screwPos(si) { return holeWorld(st.screwHole[si]); }
+// 视觉固定：vHole[si] = 该螺丝视觉上“坐在”的孔（-1 = 不固定）。参考：拧走的螺丝在目标孔落座后 releaseDelay 才释放原板
+function schedPin(si, hi, t) { pend = pend.filter(q => q.si !== si); pend.push({ si, hi, t }); }
 function liftScrew(si) {
   const v = screwVis[si], t0 = now(); const [x, y] = screwPos(si);
   v.x = x; v.y = y; v.anim = { k: 'lift', t0, a0: v.ang, l0: v.lift };
   sfx.ratchet(S.liftDur / 1000, S, true);
-  // 拧出完成（离开孔）时，不再被任何螺丝固定的板开始下落（参考：点击后约 0.17s）
-  const fell = liftOut(L, st, si); fell.forEach(pi => { plateVis[pi].s = 'wait'; plateVis[pi].t0 = t0 + S.liftDur + S.fallDelay; });
+  liftOut(L, st, si);
+  if (S.releaseAt === 'lift') schedPin(si, -1, t0 + S.liftDur + S.releaseDelay);
 }
-function dropBack(si) { cancelLift(st, si); const v = screwVis[si]; v.anim = { k: 'down', t0: now(), a0: v.ang, l0: v.lift }; sfx.ratchet(S.screwInDur / 1000, S, false); }
+function dropBack(si) { cancelLift(st, si); pend = pend.filter(q => q.si !== si); vHole[si] = st.screwHole[si]; const v = screwVis[si]; v.anim = { k: 'down', t0: now(), a0: v.ang, l0: v.lift }; sfx.ratchet(S.screwInDur / 1000, S, false); }
 function sendScrew(si, hi) {
   const v = screwVis[si], from = screwPos(si), to = [L.holes[hi].x, L.holes[hi].y];
   const vac = st.screwHole[si];
+  const to2 = holeWorld(hi); to[0] = to2[0]; to[1] = to2[1];
   const fell = applyMove(L, st, si, hi); lastVacated = vac;
   const t0 = now();
-  v.anim = { k: 'fly', t0, from, to, a0: v.ang, l0: v.lift || S.liftH, sc0: v.sc };
-  const tLand = t0 + S.flyDur + S.screwInDur;
-  fell.forEach(pi => { plateVis[pi].s = 'wait'; plateVis[pi].t0 = t0 + S.fallDelay; });
+  v.anim = { k: 'fly', t0, from, to, a0: v.ang, l0: v.lift || S.liftH, sc0: v.sc, hi };
   return fell;
 }
 function step(t, dt) {
@@ -96,27 +102,31 @@ function step(t, dt) {
       v.x = (1 - e) * (1 - e) * a.from[0] + 2 * (1 - e) * e * mx + e * e * a.to[0];
       v.y = (1 - e) * (1 - e) * a.from[1] + 2 * (1 - e) * e * my + e * e * a.to[1];
       v.lift = a.l0;
-      if (p >= 1) { v.anim = { k: 'in', t0: t, a0: v.ang, l0: v.lift }; sfx.ratchet(S.screwInDur / 1000, S, false); }
+      if (p >= 1) { v.anim = { k: 'in', t0: t, a0: v.ang, l0: v.lift, hi: a.hi }; sfx.ratchet(S.screwInDur / 1000, S, false); }
     } else if (a.k === 'in') {
       const p = Math.min(1, (t - a.t0) / S.screwInDur), e = easeIO(p);
       v.lift = a.l0 * (1 - e); v.ang = a.a0 + S.screwInTurns * Math.PI * 2 * e;
       v.sc = S.liftScale + (1 - S.liftScale) * e;
-      if (p >= 1) { v.anim = { k: 'settle', t0: t }; sfx.thunk(S); }
+      if (p >= 1) { v.anim = { k: 'settle', t0: t }; sfx.thunk(S); schedPin(si, a.hi, t + S.releaseDelay); }
     } else if (a.k === 'settle') {
       const p = Math.min(1, (t - a.t0) / 160); v.sc = 1 - S.settle * Math.sin(Math.PI * p) ; v.lift = 0;
       if (p >= 1) { v.anim = null; v.sc = 1; }
     }
   });
+  pend = pend.filter(q => { if (t >= q.t) { vHole[q.si] = q.hi; return false; } return true; });
+  const vst = { screwHole: vHole, removed: st.removed, lifted: null };
+  const pinsOf = L.plates.map((_, pi) => platePins(L, vst, pi));
   plateVis.forEach((pv, pi) => {
-    if (pv.s === 'wait' && t >= pv.t0) { pv.s = 'falling'; pv.vy = 0; sfx.fall(S); }
-    if (pv.s === 'falling') { pv.vy += S.gravity * dt; pv.y += pv.vy * dt; pv.rot += S.fallSpin * Math.PI / 180 * dt; if (pv.y > 1600) pv.s = 'gone'; }
+    const pins = pinsOf[pi], pw = pins.length === 1 ? holeWorld(vHole[pins[0]]) : null;
+    const ev = stepBody(pv, pins.length, pw, Math.min(dt, 0.05), S);
+    if (ev === 'fall') sfx.fall(S);
   });
   if (!finishedAt && done(L, st) && plateVis.every(p => p.s === 'gone')) { finishedAt = t; onFinish(); }
 }
 const busy = () => screwVis.some(v => v.anim && v.anim.k !== 'hover');
 
 // ---------- 绘制 ----------
-const visOnG = (pi) => plateVis[pi].s === 'on' || plateVis[pi].s === 'wait';
+const visOnG = (pi) => plateVis[pi].s === 'on' || plateVis[pi].s === 'swing';
 function screwLayer(si) { const h = st.screwHole[si]; let lay = -1; L.plates.forEach((p, pi) => { if (visOnG(pi) && p.holes.includes(h)) lay = Math.max(lay, p.layer); }); return lay; }
 function draw(t) {
   const v = view();
@@ -124,7 +134,7 @@ function draw(t) {
   ctx.setTransform(v.k * v.b, 0, 0, v.k * v.b, v.k * v.tx, v.oy + v.k * v.ty);
   ctx.drawImage(baseCanvas, 0, 0, 720, 1280);
   L.holes.forEach(h => drawHole(ctx, h.x, h.y, S));
-  const visOn = (pi) => plateVis[pi].s === 'on' || plateVis[pi].s === 'wait';
+  const visOn = visOnG;
   const moving = [];
   const drawS = (si) => { const sv = screwVis[si]; if (sv.anim) { moving.push(si); return; } const [x, y] = screwPos(si); drawScrew(ctx, x, y, S, sv.ang, 0, sv.sc); };
   // 飞行中的螺丝：其原板上的位置（逻辑已移走）在旧板上应显示为孔
@@ -132,17 +142,18 @@ function draw(t) {
   for (let lay = -1; lay <= maxLayer; lay++) {
     if (lay >= 0) L.plates.forEach((p, pi) => {
       if (p.layer !== lay || !visOn(pi)) return;
-      const sp = sprites[pi]; ctx.save(); ctx.globalAlpha = 1;
+      const sp = sprites[pi], b = plateVis[pi]; ctx.save(); ctx.globalAlpha = 1;
+      if (b.posed) { ctx.translate(b.C[0] + b.dx, b.C[1] + b.dy); ctx.rotate(b.ang); ctx.translate(-b.C[0], -b.C[1]); }
       ctx.shadowColor = `rgba(20,10,30,${S.plateShadow})`; ctx.shadowBlur = 6 * v.k; ctx.shadowOffsetY = 3 * v.k;
-      ctx.drawImage(sp.c, sp.x, sp.y, sp.w, sp.h); ctx.restore();
-      p.holes.forEach(h => drawHole(ctx, L.holes[h].x, L.holes[h].y, S));
+      ctx.drawImage(sp.c, sp.x, sp.y, sp.w, sp.h); ctx.shadowColor = 'transparent';
+      p.holes.forEach(h => drawHole(ctx, L.holes[h].x, L.holes[h].y, S)); ctx.restore();
     });
     L.screws.forEach((_, si) => { if (screwLayer(si) === lay) drawS(si); });
   }
   plateVis.forEach((pv, pi) => {
-    if (pv.s !== 'falling') return; const sp = sprites[pi], p = L.plates[pi];
-    ctx.save(); if (S.fallFade) ctx.globalAlpha = Math.max(0, 1 - pv.y / 800);
-    const cx = sp.x + sp.w / 2, cy = sp.y + sp.h / 2; ctx.translate(cx, cy + pv.y); ctx.rotate(pv.rot); ctx.translate(-cx, -cy);
+    if (pv.s !== 'fall') return; const sp = sprites[pi], p = L.plates[pi];
+    ctx.save(); if (S.fallFade) ctx.globalAlpha = Math.max(0, 1 - pv.dy / 800);
+    ctx.translate(pv.C[0] + pv.dx, pv.C[1] + pv.dy); ctx.rotate(pv.ang); ctx.translate(-pv.C[0], -pv.C[1]);
     ctx.drawImage(sp.c, sp.x, sp.y, sp.w, sp.h); p.holes.forEach(h => drawHole(ctx, L.holes[h].x, L.holes[h].y, S)); ctx.restore();
   });
   moving.forEach(si => { const sv = screwVis[si]; drawScrew(ctx, sv.x, sv.y, S, sv.ang, sv.lift, sv.sc); });
@@ -196,8 +207,8 @@ function drawHand() {
 }
 
 // ---------- 交互 ----------
-function hitScrew(x, y) { let best = -1, bd = S.screwSize * 0.65; st.screwHole.forEach((h, si) => { const d = Math.hypot(L.holes[h].x - x, L.holes[h].y - y); if (d < bd && screwFree(L, st, si)) { bd = d; best = si; } }); return best; }
-function hitHole(x, y) { let best = -1, bd = Math.max(S.holeSize, S.screwSize) * 0.8; L.holes.forEach((h, hi) => { const d = Math.hypot(h.x - x, h.y - y); if (d < bd && holeUsable(L, st, hi)) { bd = d; best = hi; } }); return best; }
+function hitScrew(x, y) { let best = -1, bd = S.screwSize * 0.65; st.screwHole.forEach((h, si) => { const hw = holeWorld(h), d = Math.hypot(hw[0] - x, hw[1] - y); if (d < bd && screwFree(L, st, si)) { bd = d; best = si; } }); return best; }
+function hitHole(x, y) { let best = -1, bd = Math.max(S.holeSize, S.screwSize) * 0.8; L.holes.forEach((h, hi) => { const hw = holeWorld(hi), d = Math.hypot(hw[0] - x, hw[1] - y); if (d < bd && holeUsable(L, st, hi)) { bd = d; best = hi; } }); return best; }
 function tapAt(px, py) { // 设计坐标
   sfx.resume();
   const v = view(), w = { x: (px - v.tx) / v.b, y: (py - v.ty) / v.b };
@@ -248,7 +259,7 @@ async function tapWorld(wx, wy, tok) {
   const x = d.x + (Math.random() - 0.5) * j, y = d.y + (Math.random() - 0.5) * j;
   await moveHand(x, y, tok); if (S.pressEnabled) pressHand(); await wait(60, tok); tapAt(d.x, d.y); await wait(90, tok);
 }
-async function waitIdle(tok) { while (busy() || plateVis.some(p => p.s === 'wait')) { if (tok !== autoToken) throw 'stop'; await new Promise(r => requestAnimationFrame(r)); } }
+async function waitIdle(tok) { while (busy() || pend.length) { if (tok !== autoToken) throw 'stop'; await new Promise(r => requestAnimationFrame(r)); } }
 async function autoSolve() {
   if (autoRunning) { autoToken++; autoRunning = false; hand.visible = false; updAutoBtn(); return; }
   if (finishedAt || done(L, st)) newGame();
@@ -262,7 +273,7 @@ async function autoSolve() {
     await wait(S.autoStartDelay, tok);
     for (const [si, hi] of plan) {
       await waitIdle(tok);
-      const h0 = L.holes[st.screwHole[si]], h1 = L.holes[hi];
+      const w0 = holeWorld(st.screwHole[si]), w1 = holeWorld(hi), h0 = { x: w0[0], y: w0[1] }, h1 = { x: w1[0], y: w1[1] };
       if (S.moveRule === 'tap2') {
         await tapWorld(h0.x, h0.y, tok); await waitIdle(tok); await wait(S.autoSelectGap, tok);
         await tapWorld(h1.x, h1.y, tok);
@@ -313,7 +324,7 @@ function updRecBtn() { const b = document.getElementById('btnRec'); b.textConten
 
 // ---------- AE / 3D 导出 ----------
 const aeRec = createAERecorder({
-  sfx, screwLayer, handState, endAlpha, coverInfo,
+  sfx, screwLayer, holeWorld, handState, endAlpha, coverInfo,
   env: () => ({ L, st, S, plateVis, screwVis, view, sprites, bgCanvas, baseCanvas, canvas: cv, handImg: hand.img }),
   drawTextsTo: (g) => withCtx(g, drawTexts), drawEndTo: (g, p) => withCtx(g, () => drawEnd(0, p)),
 });

@@ -75,10 +75,10 @@ export async function export3D({ S, ae, env, drawTextsTo, drawEndTo }) {
     const at = sampler(s), st = stepper(s);
     visTrack(vis.name, t => st(t)[1] !== 2);
     const pv = [], qv = [], q = new THREE.Quaternion(), ax = new THREE.Vector3(0, 1, 0);
-    times.forEach(t => { const e = at(t), falling = st(t)[1] >= 1; pv.push(cx, top(p.layer) + (falling ? 0.03 : 0), cz + e[2] * v.b * PX); q.setFromAxisAngle(ax, -e[3]); qv.push(q.x, q.y, q.z, q.w); });
-    addTrack(nm, 'position', pv, 3); if (s.some(e => e[3])) addTrack(nm, 'quaternion', qv, 4);
+    times.forEach(t => { const e = at(t), falling = st(t)[1] >= 1; pv.push(cx + e[2] * v.b * PX, top(p.layer) + (falling ? 0.03 : 0), cz + e[3] * v.b * PX); q.setFromAxisAngle(ax, -e[4]); qv.push(q.x, q.y, q.z, q.w); });
+    addTrack(nm, 'position', pv, 3); if (s.some(e => e[4])) addTrack(nm, 'quaternion', qv, 4);
     const k = s.findIndex(e => e[1] === 1), kg = s.findIndex(e => e[1] === 2);
-    if (S.fallFade && k >= 0) { opacity[nm + '_mesh'] = []; times.forEach(t => { const e = at(t); opacity[nm + '_mesh'].push([t, Math.round(Math.max(0, 1 - e[2] / 800) * 100) / 100]); }); }
+    if (S.fallFade && k >= 0) { opacity[nm + '_mesh'] = []; times.forEach(t => { const e = at(t); opacity[nm + '_mesh'].push([t, Math.round(Math.max(0, 1 - e[3] / 800) * 100) / 100]); }); }
     nodes.push({ name: nm, kind: 'plate', fall: k >= 0 ? r5(s[k][0]) : null, gone: kg >= 0 ? r5(s[kg][0]) : null });
   });
 

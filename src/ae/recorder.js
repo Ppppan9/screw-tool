@@ -23,10 +23,14 @@ export function createAERecorder(api) {
     if (!R) return;
     const E = api.env(); if (E.L !== R.L) { R = null; return; }
     const t = Math.max(R.lastT + 1e-4 * (R.frames > 0), (now - R.t0) / 1000);
-    E.plateVis.forEach((pv, pi) => R.plates[pi].push([t, pv.s === 'falling' ? 1 : pv.s === 'gone' ? 2 : 0, r3(pv.y), r3(pv.rot)]));
+    // v1.4 板块样本 [t, 状态(0 原位静止/1 有位姿:摆动或下落/2 消失), dx, dy, 旋转(rad)]，位姿绕贴图中心（AE 锚点）
+    E.plateVis.forEach((pv, pi) => R.plates[pi].push([t, pv.s === 'gone' ? 2 : pv.posed ? 1 : 0, r3(pv.dx), r3(pv.dy), r3(pv.ang)]));
     E.screwVis.forEach((sv, si) => {
-      if (sv.anim) R.screws[si].push([t, 1, r3(sv.x), r3(sv.y), r3(sv.ang), r3(sv.lift), r3(sv.sc), 99]);
-      else { const h = E.L.holes[E.st.screwHole[si]]; R.screws[si].push([t, 0, h.x, h.y, r3(sv.ang), 0, r3(sv.sc), api.screwLayer(si)]); }
+      if (sv.anim) { R.screws[si].push([t, 1, r3(sv.x), r3(sv.y), r3(sv.ang), r3(sv.lift), r3(sv.sc), 99]); return; }
+      const h = E.L.holes[E.st.screwHole[si]], w = api.holeWorld(E.st.screwHole[si]);
+      // 坐在摆动板孔里的螺丝随板移动 → 作为“运动”段逐帧烘焙
+      if (Math.abs(w[0] - h.x) > 0.01 || Math.abs(w[1] - h.y) > 0.01) R.screws[si].push([t, 1, r3(w[0]), r3(w[1]), r3(sv.ang), 0, r3(sv.sc), 99]);
+      else R.screws[si].push([t, 0, h.x, h.y, r3(sv.ang), 0, r3(sv.sc), api.screwLayer(si)]);
     });
     const hq = api.handState(); R.hand.push(hq ? [t, r3(hq.x), r3(hq.y), r3(hq.s), 1] : [t, 0, 0, 1, 0]);
     R.end.push([t, r3(api.endAlpha(now))]);
@@ -152,9 +156,9 @@ export function createAERecorder(api) {
       const s = rec.plates[pi]; const rr = runs(s, e => e[1] === 1); if (!rr.length) return;
       const [i0, i1] = rr[0], seg = s.slice(i0, i1 + 2), fr = frames(seg.length > 1 ? seg : [seg[0], [seg[0][0] + 1 / fps, ...seg[0].slice(1)]]);
       const { a, sp } = plateA[pi], tin = FR(s[i0][0]), tout = Math.min(D, Math.max(tin + 1 / fps, FR(tEnd(s, i1))));
-      const tr = { anchor: [(a.cx - sp.x) * r, (a.cy - sp.y) * r], position: prop(fr, e => P(a.cx, a.cy + e[2]), TOL.pos), scale: [WS, WS], rotation: prop(fr, e => e[3] * 180 / Math.PI, TOL.rot) };
-      if (S.fallFade) tr.opacity = prop(fr, e => Math.max(0, 1 - e[2] / 800) * 100, TOL.op);
-      layers.push(Ly(`板块 ${pi + 1} 下落`, { asset: a.id }, { in: tin, out: tout, label: LABEL.fall, markers: [[r4(tin), '掉落']], tr }));
+      const tr = { anchor: [(a.cx - sp.x) * r, (a.cy - sp.y) * r], position: prop(fr, e => P(a.cx + e[2], a.cy + e[3]), TOL.pos), scale: [WS, WS], rotation: prop(fr, e => e[4] * 180 / Math.PI, TOL.rot) };
+      if (S.fallFade) tr.opacity = prop(fr, e => Math.max(0, 1 - e[3] / 800) * 100, TOL.op);
+      layers.push(Ly(`板块 ${pi + 1} 运动`, { asset: a.id }, { in: tin, out: tout, label: LABEL.fall, markers: [[r4(tin), '摆动/掉落']], tr }));
     });
     // 移动中的螺丝（抬起/悬停/飞行/拧入/回弹）：投影、螺杆、螺帽、十字槽 4 层
     for (const sg of segs.filter(x => x.kind === 'move')) {

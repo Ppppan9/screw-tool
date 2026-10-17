@@ -1,5 +1,5 @@
 // 设置定义：所有可调参数。版本号 + 迁移。
-export const SETTINGS_VERSION = 7;
+export const SETTINGS_VERSION = 8;
 export const STORE_KEY = 'screwTool.settings';
 // [key, 标签, 类型, 默认, min, max, step]  类型: range/color/bool/select/text/file
 export const GROUPS = [
@@ -98,9 +98,18 @@ export const GROUPS = [
     ['screwInDur', '拧入时长(ms)', 'range', 130, 30, 800, 10],
     ['screwInTurns', '拧入旋转圈数(顺时针)', 'range', 1, 0, 5, 0.25],
     ['settle', '拧入回弹幅度', 'range', 0.06, 0, 0.3, 0.01],
-    ['fallDelay', '板掉落延迟(ms)', 'range', 30, 0, 800, 10],
-    ['gravity', '下落重力(px/s²)', 'range', 5200, 500, 15000, 100],
-    ['fallSpin', '下落旋转(度/秒，参考=0)', 'range', 0, -360, 360, 5],
+  ]],
+  ['物理', [
+    ['releaseAt', '板块释放时机', 'select', 'seat', [['seat', '螺丝在目标孔落座后（参考视频）'], ['lift', '螺丝拧出离孔时（v1.2.1 旧行为）']]],
+    ['releaseDelay', '释放延迟(ms，参考≈33–67)', 'range', 50, 0, 800, 10],
+    ['gravity', '重力(px/s²，参考≈3600)', 'range', 3600, 500, 15000, 100],
+    ['swingBoost', '单钉摆动加速倍率(参考≈2.2)', 'range', 2.2, 0.2, 6, 0.1],
+    ['swingMax', '单钉摆动最大角度(度，参考 16.75)', 'range', 17, 0, 90, 0.5],
+    ['swingDamp', '摆动阻尼(1/s)', 'range', 6, 0, 40, 0.5],
+    ['swingBounce', '到达最大角回弹系数', 'range', 0.05, 0, 1, 0.01],
+    ['swingKick', '摆动初始角速度(度/秒)', 'range', 0, 0, 600, 5],
+    ['releaseSpinK', '掉落初始旋转(度/秒 每 px 钉偏心，参考≈8.3)', 'range', 8.3, 0, 40, 0.1],
+    ['fallSpin', '掉落额外旋转(度/秒)', 'range', 0, -360, 360, 5],
     ['fallFade', '下落时淡出', 'bool', false],
   ]],
   ['文字', [
@@ -205,6 +214,8 @@ export function migrate(obj) {
     if ('recBitrate' in s && typeof s.recBitrate !== 'number') delete s.recBitrate;
     v = 7;
   }
+  // v7 -> v8（v1.4 板块物理）：新增“物理”分组（只补默认）；重力旧默认 5200 → 参考实测 3600；fallDelay 由 releaseDelay 取代
+  if (v < 8) { if (s.gravity === 5200) delete s.gravity; delete s.fallDelay; v = 8; }
   const out = { ...DEFS };
   for (const k in DEFS) if (k in s && typeof s[k] === typeof DEFS[k]) out[k] = s[k];
   return out;
