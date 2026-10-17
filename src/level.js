@@ -69,22 +69,36 @@ export function setPhysicsRules(o = {}) { if (o.swingMax != null) SWING_MAX = o.
 export function getRelease() { return RELEASE; }
 function rotPt(x, y, sw) { const c = Math.cos(sw.ang), s = Math.sin(sw.ang), ux = x - sw.px, uy = y - sw.py; return [sw.px + c * ux - s * uy, sw.py + s * ux + c * uy]; }
 function swingPose(L, pi, hi) {
+  // 位姿只取决于 (板, 支点孔, swingMax) → 缓存（求解器/生成器会反复走到同一状态）
+  const key = pi + ':' + hi + ':' + SWING_MAX; L._swc = L._swc || new Map();
+  if (!L._swc.has(key)) L._swc.set(key, swingPose0(L, pi, hi));
+  return L._swc.get(key);
+}
+function swingPose0(L, pi, hi) {
   const p = L.plates[pi], h = L.holes[hi], m = p._mp || (p._mp = massProps(p.poly)), rx = m.cx - h.x;
   const sw = { px: h.x, py: h.y, ang: Math.abs(rx) < 1 ? 0 : Math.sign(rx) * SWING_MAX };
   sw.poly = p.poly.map(([x, y]) => rotPt(x, y, sw)); sw.holes = p.holes.map(k => rotPt(L.holes[k].x, L.holes[k].y, sw));
+  // 预先算好摆动后对准/覆盖的底板孔（求解器/生成器会大量调用）
+  sw.al = new Set(); sw.cov = new Set();
+  L.holes.forEach((h, k) => {
+    if (sw.holes.some(([x, y]) => Math.hypot(x - h.x, y - h.y) <= ALIGN_TOL)) { sw.al.add(k); sw.cov.add(k); }
+    else if (pointInPoly(h.x, h.y, sw.poly) || distToPoly(h.x, h.y, sw.poly) < EDGE_TOL) sw.cov.add(k);
+  });
   return sw;
 }
 function distToPoly(x, y, poly) { let d = 1e9; for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) { const [ax, ay] = poly[j], [bx, by] = poly[i], dx = bx - ax, dy = by - ay, t = Math.max(0, Math.min(1, ((x - ax) * dx + (y - ay) * dy) / (dx * dx + dy * dy || 1))); d = Math.min(d, Math.hypot(ax + t * dx - x, ay + t * dy - y)); } return d; }
 // 板 pi 在当前位姿下是否有自己的孔对准底板孔 hi
 export function plateAligned(L, st, pi, hi) {
   const sw = st.swing && st.swing.get(pi); if (!sw) return L.plates[pi].holes.includes(hi);
-  const h = L.holes[hi]; return sw.holes.some(([x, y]) => Math.hypot(x - h.x, y - h.y) <= ALIGN_TOL);
+  return sw.al.has(hi);
 }
 // 板 pi 在当前位姿下是否覆盖底板孔 hi（材料或孔）
 export function plateCovers(L, st, pi, hi) {
   const sw = st.swing && st.swing.get(pi); if (!sw) return coverInfo(L)[hi].includes(pi);
-  const h = L.holes[hi]; return plateAligned(L, st, pi, hi) || pointInPoly(h.x, h.y, sw.poly) || distToPoly(h.x, h.y, sw.poly) < EDGE_TOL;
+  return sw.cov.has(hi);
 }
+// 当前位姿下可能覆盖底板孔 hi 的板（静止覆盖表 ∪ 摆动板）
+function coverCands(L, st, hi) { const c = coverInfo(L)[hi]; if (!st.swing || !st.swing.size) return c; const out = new Set(c); st.swing.forEach((_, pi) => out.add(pi)); return [...out]; }
 const isLifted = (st, si) => RELEASE === 'lift' && st.lifted && st.lifted.has(si);
 export function coverInfo(L) {
   // 每个孔被哪些板覆盖，以及板在该点是否有孔
@@ -106,12 +120,12 @@ export function holeLayer(L, hi) {
 export function holeUsable(L, st, hi) {
   if (holeOccupied(st, hi)) return false;
   const hl = holeLayer(L, hi);
-  return L.plates.every((p, pi) => st.removed.has(pi) || !plateCovers(L, st, pi, hi) || plateAligned(L, st, pi, hi) || (BLOCK && p.layer < hl && !st.swing.has(pi)));
+  return coverCands(L, st, hi).every(pi => st.removed.has(pi) || !plateCovers(L, st, pi, hi) || plateAligned(L, st, pi, hi) || (BLOCK && L.plates[pi].layer < hl && !st.swing.has(pi)));
 }
 // 螺丝可取：其位置上方没有更高层且未开孔的板压住
 export function screwFree(L, st, si) {
   const hi = st.screwHole[si]; if (hi < 0) return false;
-  const cov = L.plates.map((_, pi) => pi).filter(pi => !st.removed.has(pi) && plateCovers(L, st, pi, hi));
+  const cov = coverCands(L, st, hi).filter(pi => !st.removed.has(pi) && plateCovers(L, st, pi, hi));
   const pinnedTop = Math.max(-1, ...cov.filter(pi => plateAligned(L, st, pi, hi)).map(pi => L.plates[pi].layer));
   return !cov.some(pi => !plateAligned(L, st, pi, hi) && L.plates[pi].layer > pinnedTop);
 }

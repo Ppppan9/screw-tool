@@ -19,7 +19,7 @@ const r = await p.evaluate((REC) => new Promise(res => {
     while (k < plan.length && t >= plan[k][0]) { G.tapHole(plan[k][1]); log.push(['tap', k, Math.round(t)]); k++; }
     const b23 = G.plateVis[P23], b22 = G.plateVis[P22];
     const sv = G.screwVis.map(v => v.anim ? v.anim.k : '').join(',');
-    log.push([Math.round(t), b23.s, +b23.dy.toFixed(1), b22.s, +(b22.ang * 180 / Math.PI).toFixed(2), G.holeWorld(h22l).map(v => +v.toFixed(2)), G.holeWorld(h22r).map(v => +v.toFixed(1)), sv.replace(/,+/g, ',')]);
+    log.push([Math.round(t), b23.s, +b23.dy.toFixed(1), b22.s, +(b22.ang * 180 / Math.PI).toFixed(2), G.holeWorld(h22l).map(v => +v.toFixed(2)), (() => { const b = G.plateVis[P22], h = L.holes[h22r], c = Math.cos(b.ang), sn = Math.sin(b.ang), ux = h.x - b.C[0], uy = h.y - b.C[1]; return [+(b.C[0] + c * ux - sn * uy + b.dx).toFixed(1), +(b.C[1] + sn * ux + c * uy + b.dy).toFixed(1)]; })(), G.holeWorld(h22r), sv.replace(/,+/g, ',')]);
     while (sh < shots.length && t >= shots[sh].t) { out.shots.push({ f: shots[sh].f, t: Math.round(t), url: stage.toDataURL('image/jpeg', 0.9) }); sh++; }
     if (REC && t > F(10)) (out.all = out.all || []).push([Math.round(t), stage.toDataURL('image/jpeg', 0.85)]);
     if (t > F(110)) { out.log = log; out.view = G.view(); out.P = { P23, P22, h22l, h22r }; return res(out); }
@@ -33,7 +33,7 @@ r.shots.forEach(s => fs.writeFileSync(`/tmp/physfr/f${s.f}.jpg`, Buffer.from(s.u
 fs.writeFileSync('/tmp/physfr/view.json', JSON.stringify(r.view));
 if (r.all) { fs.mkdirSync('/tmp/physfr/all', { recursive: true }); r.all.forEach(([t, u], i) => fs.writeFileSync(`/tmp/physfr/all/${String(i).padStart(4, '0')}_${t}.jpg`, Buffer.from(u.split(',')[1], 'base64'))); }
 const L = r.log.filter(e => typeof e[0] === 'number'), taps = r.log.filter(e => e[0] === 'tap').map(e => e[2]);
-const seatT = (after) => { let w = false; for (const e of L) { if (e[0] < after) continue; if (e[7].includes('in')) w = true; else if (w) return e[0]; } return null; };
+const seatT = (after) => { let w = false; for (const e of L) { if (e[0] < after) continue; if (e[8].includes('in')) w = true; else if (w) return e[0]; } return null; };
 const fall23 = L.find(e => e[1] === 'fall'), swing22 = L.find(e => e[3] === 'swing');
 const seat1 = seatT(taps[1]), seat2 = seatT(taps[3]);
 const before = L.filter(e => e[0] < (fall23 ? fall23[0] : 1e9));
@@ -41,14 +41,14 @@ const res = {
   taps, seat1, fall23At: fall23 && fall23[0], fallAfterSeatMs: fall23 && fall23[0] - seat1, fallAfterTap1Ms: fall23 && fall23[0] - taps[0],
   movedBeforeRelease: before.some(e => e[2] !== 0), seat2, swingAt: swing22 && swing22[0], swingAfterSeatMs: swing22 && swing22[0] - seat2,
   swingAngles: L.filter(e => swing22 && e[0] >= swing22[0] && e[0] < swing22[0] + 300).filter((_, i) => i % 2 === 0).map(e => [e[0] - swing22[0], e[4]]),
-  finalAngle: L[L.length - 1][4], pivotDrift: Math.max(...L.map(e => Math.hypot(e[5][0] - 426, e[5][1] - 754))), rightHole: L[L.length - 1][6],
+  finalAngle: L[L.length - 1][4], pivotDrift: Math.max(...L.map(e => Math.hypot(e[5][0] - 426, e[5][1] - 754))), rightPlateHole: L[L.length - 1][6], rightBaseHole: L[L.length - 1][7],
 };
-const firstAfter = (t0, f) => { const e = L.find(e => e[0] >= t0 && f(e[7])); return e ? e[0] : null; };
+const firstAfter = (t0, f) => { const e = L.find(e => e[0] >= t0 && f(e[8])); return e ? e[0] : null; };
 const tm = (k) => { const tTap1 = taps[k * 2], tTap2 = taps[k * 2 + 1], hov = firstAfter(tTap1, x => x.includes('hover')), inn = firstAfter(tTap2, x => x.includes('in')), seat = k ? seat2 : seat1; return { liftMs: hov - tTap1, flyMs: inn - tTap2, screwInMs: seat - inn, tap2ToSeatMs: seat - tTap2 }; };
 res.screw = [tm(0), tm(1)];
 // 参考（相对第一手 tap1=3.333s）：板23 开始掉落 +767ms(4.100s)，板22 开始摆动 +2300ms(5.633s)
 res.vsRef = { fall23: [res.fall23At - taps[0], 767], swing22: [res.swingAt - taps[0], 2300] };
 console.log(JSON.stringify(res));
 const ok = res.fall23At && res.fallAfterSeatMs >= 0 && res.fallAfterSeatMs < 150 && res.fallAfterTap1Ms > 600 && !res.movedBeforeRelease
-  && res.swingAt && res.swingAfterSeatMs >= 0 && res.finalAngle > 12 && res.finalAngle < 22 && res.pivotDrift < 1.5 && Math.hypot(res.rightHole[0] - 482, res.rightHole[1] - 757) > 8;
+  && res.swingAt && res.swingAfterSeatMs >= 0 && res.finalAngle > 12 && res.finalAngle < 22 && res.pivotDrift < 1.5 && Math.hypot(res.rightPlateHole[0] - 482, res.rightPlateHole[1] - 757) > 8 && Math.hypot(res.rightBaseHole[0] - 482, res.rightBaseHole[1] - 757) < 0.01; // 板孔随板移动，底板孔固定
 console.log(ok ? 'PHYSICS OK' : 'PHYSICS FAIL'); process.exit(ok ? 0 : 1);
