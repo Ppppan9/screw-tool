@@ -36,7 +36,7 @@ export const GROUPS = [
     ['partStyle', '切分风格', 'select', 'strip', [['strip', '条状分段（参考手指风格）'], ['voronoi', 'Voronoi 拉长块'], ['grid', '网格']]],
     ['plateSize', '目标板尺寸(px)', 'range', 110, 50, 260, 2],
     ['plateCount', '板数(Voronoi，0=按尺寸)', 'range', 0, 0, 60, 1],
-    ['vorDensity', 'Voronoi 自动板数倍率(板数=0 时)', 'range', 2.2, 0.5, 5, 0.1],
+    ['vorDensity', 'Voronoi 自动板数倍率(板数=0 时)', 'range', 2.6, 0.5, 5, 0.1],
     ['partAngle', '条带方向(度)', 'range', 90, 0, 180, 1],
     ['partRandom', '随机度', 'range', 0.5, 0, 1, 0.01],
     ['shapeSeed', '图形关卡种子', 'range', 1, 1, 9999, 1],

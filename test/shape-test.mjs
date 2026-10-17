@@ -4,7 +4,8 @@ const b = await chromium.launch({ executablePath: '/usr/bin/google-chrome', head
 const p = await b.newPage({ viewport: { width: 1400, height: 1000 } });
 const errs = []; p.on('pageerror', e => errs.push(String(e))); p.on('console', m => m.type() === 'error' && errs.push(m.text()));
 await p.goto('file://' + process.cwd() + '/index.html'); await p.waitForTimeout(400);
-const cases = [['heart', { partStyle: 'strip', baseFill: 'color' }], ['star_hole', { partStyle: 'voronoi', baseFill: 'color', imgLayers: 2 }], ['cat', { partStyle: 'strip', baseFill: 'image', plateTint: 'image', partAngle: 75 }]];
+const ONLY = process.env.ONLY; const cases0 = [['heart', { partStyle: 'strip', baseFill: 'color' }], ['star_hole', { partStyle: 'voronoi', baseFill: 'color', imgLayers: 2 }], ['cat', { partStyle: 'strip', baseFill: 'image', plateTint: 'image', partAngle: 75, imgLayers: 2 }]];
+const cases = ONLY ? cases0.filter(c => c[0] === ONLY) : cases0;
 const out = []; let fail = 0;
 for (const [n, opt] of cases) {
   const url = 'data:image/png;base64,' + fs.readFileSync(`test/assets/shapes/${n}.png`).toString('base64');
@@ -14,9 +15,11 @@ for (const [n, opt] of cases) {
   const info = await p.evaluate(() => ({ name: __game.L.name, plates: __game.L.plates.length, screws: __game.L.screws.length, holes: __game.L.holes.length, inner: (__game.L.base.inner || []).length, outer: __game.L.base.polys.length, layers: Math.max(...__game.L.plates.map(q => q.layer)) + 1, attempts: __game.L.attempts }));
   fs.writeFileSync(`/tmp/shape_${n}.png`, Buffer.from((await p.evaluate(() => stage.toDataURL())).split(',')[1], 'base64'));
   await p.evaluate(() => { window.__finished = false; Object.assign(__game.S, { autoSpeed: 4, autoStepMin: 0, autoStepMax: 20, autoMoveDur: 60, autoSelectGap: 0, autoStartDelay: 0, liftDur: 40, flyDur: 80, screwInDur: 40, fallDelay: 0 }); __game.autoSolve(); });
-  const t0 = Date.now(); while (!(await p.evaluate(() => window.__finished)) && Date.now() - t0 < 300000) await p.waitForTimeout(200);
+  const t0 = Date.now(); while (!(await p.evaluate(() => window.__finished)) && Date.now() - t0 < 300000) { await p.waitForTimeout(200); }
   const st = await p.evaluate(() => ({ removed: __game.st.removed.size, plates: __game.L.plates.length }));
   info.solved = st.removed === st.plates; info.ms = Date.now() - t0; if (!info.solved || info.name !== 'image') fail++;
+  // 等上一轮自动通关的收尾（手指回到空闲位置）结束，否则下一次 autoSolve() 会被当作“停止”
+  await p.waitForFunction(() => !document.getElementById('btnAuto').classList.contains('on'), null, { timeout: 10000 }).catch(() => {});
   out.push([n, info]); console.log(n, JSON.stringify(info));
 }
 await b.close();
