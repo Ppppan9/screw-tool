@@ -62,10 +62,20 @@ export function coverInfo(L) {
   return L._cover;
 }
 export function holeOccupied(st, hi) { return st.screwHole.indexOf(hi) >= 0; }
-// 孔可用：没有螺丝，且所有覆盖该点（未掉落）的板在此处都有孔
+// v1.2 螺丝阻挡判定（可在设置里关闭，关闭后回到 v1.1 规则：板只被自己孔里的螺丝固定）
+let BLOCK = true;
+export function setBlocking(v) { BLOCK = !!v; }
+export function getBlocking() { return BLOCK; }
+// 孔所在层：拥有该孔的板的最高层；不属于任何板 = 底板(-1)
+export function holeLayer(L, hi) {
+  if (!L._hl) L._hl = L.holes.map((_, h) => Math.max(-1, ...L.plates.filter(p => p.holes.includes(h)).map(p => p.layer)));
+  return L._hl[hi];
+}
+// 孔可用：没有螺丝，且所有覆盖该点（未掉落）的板要么在此处有孔，要么（阻挡判定开启时）在孔所在层之下（螺丝穿过它直到底板）
 export function holeUsable(L, st, hi) {
   if (holeOccupied(st, hi)) return false;
-  return coverInfo(L)[hi].every(pi => st.removed.has(pi) || L.plates[pi].holes.includes(hi));
+  const hl = holeLayer(L, hi);
+  return coverInfo(L)[hi].every(pi => st.removed.has(pi) || L.plates[pi].holes.includes(hi) || (BLOCK && L.plates[pi].layer < hl));
 }
 // 螺丝可取：其位置上方没有更高层且未开孔的板压住
 export function screwFree(L, st, si) {
@@ -75,7 +85,14 @@ export function screwFree(L, st, si) {
   return !cov.some(pi => !L.plates[pi].holes.includes(hi) && L.plates[pi].layer > pinnedTop);
 }
 export function plateScrews(L, st, pi) { return st.screwHole.map((h, si) => L.plates[pi].holes.includes(h) ? si : -1).filter(i => i >= 0); }
-// 执行移动，返回掉落板列表
+// 固定某块板的螺丝：自己孔里的螺丝 + （阻挡判定）任何位置落在该板轮廓内的螺丝（螺丝贯穿该点所有重叠板直到底板）
+export function platePins(L, st, pi) {
+  if (!BLOCK) return plateScrews(L, st, pi);
+  const cov = coverInfo(L);
+  return st.screwHole.map((h, si) => h >= 0 && cov[h].includes(pi) ? si : -1).filter(i => i >= 0);
+}
+// 执行移动，返回掉落板列表。每次螺丝移动后重新评估所有板（不动点迭代）：
+// 目标孔里的螺丝会立即挡住覆盖该点的板；拔出的螺丝会释放所有被它贯穿的板
 export function applyMove(L, st, si, hi) {
   st.screwHole[si] = hi;
   const fell = [];
@@ -84,7 +101,7 @@ export function applyMove(L, st, si, hi) {
     changed = false;
     L.plates.forEach((p, pi) => {
       if (st.removed.has(pi)) return;
-      if (plateScrews(L, st, pi).length === 0) { st.removed.add(pi); fell.push(pi); changed = true; }
+      if (platePins(L, st, pi).length === 0) { st.removed.add(pi); fell.push(pi); changed = true; }
     });
   }
   return fell;
@@ -122,14 +139,15 @@ export function solve(L, st0, maxNodes = 20000) {
       if (h < 0 || !screwFree(L, st, si)) return;
       const pls = L.plates.map((p, pi) => pi).filter(pi => !st.removed.has(pi) && L.plates[pi].holes.includes(h));
       if (!pls.length) return;
-      const rem = Math.max(...pls.map(pi => plateScrews(L, st, pi).length));
+      const rem = Math.max(...pls.map(pi => platePins(L, st, pi).length));
       const lay = Math.max(...pls.map(pi => L.plates[pi].layer));
       cands.push({ si, score: rem * 10 - lay - L.holes[h].y / 1000 });
     });
     cands.sort((a, b) => a.score - b.score);
     for (const { si } of cands.slice(0, 4)) {
       const from = L.holes[st.screwHole[si]];
-      const hs = holes.slice().sort((a, b) => Math.hypot(L.holes[a].x - from.x, L.holes[a].y - from.y) - Math.hypot(L.holes[b].x - from.x, L.holes[b].y - from.y));
+      const covN = h => coverInfo(L)[h].filter(pi => !st.removed.has(pi)).length;
+      const hs = holes.slice().sort((a, b) => (covN(a) - covN(b)) || Math.hypot(L.holes[a].x - from.x, L.holes[a].y - from.y) - Math.hypot(L.holes[b].x - from.x, L.holes[b].y - from.y));
       const s2 = clone(st); applyMove(L, s2, si, hs[0]);
       const r = rec(s2, path.concat([[si, hs[0]]]));
       if (r) return r;

@@ -1,4 +1,4 @@
-import { referenceLevel, generateLevel, initState, holeUsable, screwFree, applyMove, pickHole, solve, done } from './level.js';
+import { referenceLevel, generateLevel, initState, holeUsable, screwFree, applyMove, pickHole, solve, done, setBlocking, platePins, coverInfo } from './level.js';
 import { GROUPS, DEFS, loadSettings, saveSettings, migrate, exportJSON } from './settings.js';
 import { drawBackground, drawBase, plateSprite, drawHole, drawScrew } from './render.js';
 import { Sfx } from './audio.js';
@@ -6,6 +6,7 @@ import BG_REF from './bg_ref.jpg';
 const bgImg = new Image(); bgImg.src = BG_REF; bgImg.onload = () => { if (L) rebuild(); };
 
 let S = loadSettings();
+setBlocking(S.screwBlock);
 const cv = document.getElementById('stage'), ctx = cv.getContext('2d');
 const sfx = new Sfx();
 let L, st, plateVis, screwVis, sprites, bgCanvas, baseCanvas, active = null, lastVacated = -1, autoRunning = false, autoToken = 0, endShownAt = 0, finishedAt = 0;
@@ -27,6 +28,7 @@ function worldToDesign(x, y) { const v = view(); return { x: x * v.b + v.tx, y: 
 
 // ---------- 关卡 ----------
 function newGame() {
+  setBlocking(S.screwBlock);
   autoToken++; autoRunning = false; updAutoBtn();
   L = S.level === 'random' ? generateLevel(S, S.seed) : referenceLevel();
   st = initState(L); active = null; lastVacated = -1; finishedAt = 0; endShownAt = 0;
@@ -131,6 +133,7 @@ function draw(t) {
     ctx.drawImage(sp.c, sp.x, sp.y, sp.w, sp.h); p.holes.forEach(h => drawHole(ctx, L.holes[h].x, L.holes[h].y, S)); ctx.restore();
   });
   moving.forEach(si => { const sv = screwVis[si]; drawScrew(ctx, sv.x, sv.y, S, sv.ang, sv.lift, sv.sc); });
+  if (S.debugPins) drawPinDebug();
   // 设计坐标层（文字、波纹、手指）
   ctx.setTransform(v.k, 0, 0, v.k, 0, v.oy);
   ripples.forEach(r => { const p = (t - r.t0) / 350; if (p > 1) return; ctx.beginPath(); ctx.arc(r.x, r.y, 10 + 30 * p, 0, 7); ctx.strokeStyle = `rgba(255,255,255,${0.8 * (1 - p)})`; ctx.lineWidth = 3; ctx.stroke(); });
@@ -138,6 +141,18 @@ function draw(t) {
   drawTexts();
   if (finishedAt && S.endCard && t - finishedAt > S.endDelay) drawEnd(t);
   drawHand();
+}
+// 调试叠加：每块未掉落的板 → 固定它的螺丝连线（红=别的板的螺丝贯穿挡住；绿=自己的螺丝）
+function drawPinDebug() {
+  ctx.save(); ctx.lineWidth = 2; ctx.font = 'bold 13px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  L.plates.forEach((p, pi) => {
+    if (st.removed.has(pi)) return;
+    const cx = p.poly.reduce((a, q) => a + q[0], 0) / p.poly.length, cy = p.poly.reduce((a, q) => a + q[1], 0) / p.poly.length;
+    const pins = platePins(L, st, pi);
+    pins.forEach(si => { const h = L.holes[st.screwHole[si]], own = p.holes.includes(st.screwHole[si]); ctx.strokeStyle = own ? 'rgba(40,220,90,.85)' : 'rgba(255,40,40,.95)'; ctx.setLineDash(own ? [] : [6, 4]); ctx.beginPath(); ctx.moveTo(h.x, h.y); ctx.lineTo(cx, cy); ctx.stroke(); });
+    ctx.setLineDash([]); ctx.fillStyle = 'rgba(0,0,0,.7)'; ctx.beginPath(); ctx.arc(cx, cy, 11, 0, 7); ctx.fill(); ctx.fillStyle = pins.some(si => !p.holes.includes(st.screwHole[si])) ? '#ff6060' : '#fff'; ctx.fillText(pins.length, cx, cy);
+  });
+  ctx.restore();
 }
 function drawTexts() {
   ctx.save(); ctx.globalAlpha = S.textOpacity; ctx.fillStyle = '#fff'; ctx.shadowColor = 'rgba(0,0,0,.6)'; ctx.shadowBlur = 3;
@@ -285,7 +300,7 @@ function loop(t) {
 }
 
 // ---------- 设置面板 ----------
-const REBUILD_KEYS = /^(canvas|bg|leaf|base|plate|outline|board)/, NEWGAME_KEYS = /^(level|seed|emptyHoles|screwsPerPlate|gen)/;
+const REBUILD_KEYS = /^(canvas|bg|leaf|base|plate|outline|board)/, NEWGAME_KEYS = /^(level|seed|emptyHoles|screwsPerPlate|gen|screwBlock)/;
 function applyChange(k) {
   saveSettings(S);
   if (NEWGAME_KEYS.test(k)) newGame(); else if (REBUILD_KEYS.test(k)) rebuild();

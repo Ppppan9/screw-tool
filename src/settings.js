@@ -1,5 +1,5 @@
 // 设置定义：所有可调参数。版本号 + 迁移。
-export const SETTINGS_VERSION = 2;
+export const SETTINGS_VERSION = 3;
 export const STORE_KEY = 'screwTool.settings';
 // [key, 标签, 类型, 默认, min, max, step]  类型: range/color/bool/select/text/file
 export const GROUPS = [
@@ -21,6 +21,8 @@ export const GROUPS = [
     ['boardScale', '整体缩放', 'range', 1, 0.5, 1.5, 0.01],
     ['boardOffX', '整体偏移X', 'range', 0, -300, 300, 1],
     ['boardOffY', '整体偏移Y', 'range', 0, -400, 400, 1],
+    ['screwBlock', '螺丝阻挡探测（板被任意贯穿螺丝挡住）', 'bool', true],
+    ['debugPins', '调试：显示螺丝固定哪些板', 'bool', false],
     ['moveRule', '落孔规则', 'select', 'tap2', [['tap2', '两次点击：先点螺丝再点孔（参考视频）'], ['nearest', '单击：最近空孔'], ['vacated', '单击：优先刚空出的孔'], ['random', '单击：随机空孔']]],
   ]],
   ['外观', [
@@ -103,6 +105,14 @@ export const GROUPS = [
     ['vertSize', '竖排字号', 'range', 20, 10, 40, 1],
     ['textOpacity', '文字透明度', 'range', 0.85, 0, 1, 0.01],
   ]],
+  ['导出 AE / 3D', [
+    ['aeFps', 'AE 导出帧率', 'select', '30', [['24', '24'], ['25', '25'], ['30', '30'], ['60', '60']]],
+    ['aeSampling', 'AE 关键帧', 'select', 'reduce', [['reduce', '精简（线性插值误差内删减）'], ['bake', '逐帧烘焙']]],
+    ['aeAudio', 'AE 音频', 'select', 'both', [['both', '逐事件 + 混合音轨'], ['events', '仅逐事件'], ['mixed', '仅混合音轨'], ['none', '不导出']]],
+    ['export3dFps', '3D 导出帧率', 'select', '30', [['24', '24'], ['25', '25'], ['30', '30'], ['60', '60']]],
+    ['export3dScrew', '3D 螺丝形式', 'select', 'mesh', [['mesh', '3D 网格（十字槽螺帽+螺杆）'], ['quad', '贴图四边形']]],
+    ['export3dHand', '3D 导出包含手指', 'bool', true],
+  ]],
   ['结束卡 & 录制', [
     ['endCard', '通关后显示结束卡', 'bool', false],
     ['endText', '结束卡文字', 'text', '立即下载 挑战更多关卡'],
@@ -123,6 +133,8 @@ export function migrate(obj) {
   if (v < 1) v = 1;
   // v1 -> v2：新增背景图模式；视觉默认值调整（v1 旧默认值替换为新默认）
   if (v < 2) { const OLD = { leafOpacity: 0.55, leafScale: 0.85, plateColor: '#cdc6f0', plateOutline: '#2f2438', plateThick: 5, plateGrain: 0.35, plateShadow: 0.35, screwSize: 38, screwColor: '#d4cff8' }; for (const k in OLD) if (s[k] === OLD[k]) delete s[k]; v = 2; }
+  // v2 -> v3：新增螺丝阻挡判定、调试叠加、AE/3D 导出设置——只补默认值，不改动已有值
+  if (v < 3) v = 3;
   const out = { ...DEFS };
   for (const k in DEFS) if (k in s && typeof s[k] === typeof DEFS[k]) out[k] = s[k];
   return out;

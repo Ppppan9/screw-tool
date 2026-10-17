@@ -5,7 +5,8 @@
   "main": "index.js",
   "scripts": {
     "build": "node build.mjs",
-    "test": "node test/run-test.mjs"
+    "test": "node test/run-test.mjs",
+    "test:logic": "esbuild test/logic-test.mjs --bundle --platform=node --format=esm --loader:.jpg=dataurl --log-level=warning --outfile=/tmp/screw-logic.mjs && node /tmp/screw-logic.mjs"
   },
   "repository": {
     "type": "git",
@@ -20,7 +21,9 @@
   },
   "homepage": "https://github.com/Ppppan9/screw-tool#readme",
   "devDependencies": {
+    "acorn": "^8.19.0",
     "esbuild": "^0.28.2",
-    "playwright-core": "^1.64.1"
+    "playwright-core": "^1.64.1",
+    "three": "^0.160.0"
   }
 }
