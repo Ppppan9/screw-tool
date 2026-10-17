@@ -26,9 +26,9 @@ export const GROUPS = [
   ['外观', [
     ['bgColor', '背景色', 'color', '#668772'],
     ['bgNoise', '背景纸纹强度', 'range', 0.10, 0, 0.4, 0.01],
-    ['leafOpacity', '薄荷叶线稿透明度', 'range', 0.75, 0, 1, 0.01],
+    ['leafOpacity', '薄荷叶线稿透明度', 'range', 0.55, 0, 1, 0.01],
     ['leafColor', '叶子线条色', 'color', '#eef3ea'],
-    ['leafScale', '叶子大小', 'range', 1, 0.5, 2, 0.05],
+    ['leafScale', '叶子大小', 'range', 0.85, 0.5, 2, 0.05],
     ['baseColor', '底板颜色', 'color', '#bd8784'],
     ['baseGrain', '底板木纹强度', 'range', 0.18, 0, 0.6, 0.01],
     ['baseOutline', '底板描边色', 'color', '#4a2626'],

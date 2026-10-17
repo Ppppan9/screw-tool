@@ -16,28 +16,27 @@ const hexA = (h, a) => { const n = parseInt(h.slice(1), 16); return `rgba(${n >>
 export const shade = (h, f) => { const n = parseInt(h.slice(1), 16); const c = [n >> 16, n >> 8 & 255, n & 255].map(v => Math.max(0, Math.min(255, Math.round(f > 0 ? v + (255 - v) * f : v * (1 + f))))); return `rgb(${c})`; };
 
 function leaf(ctx, len, wid, rnd) {
-  // 卵形锯齿叶（薄荷），从原点指向 +x
-  const N = 9, up = [], dn = [];
-  for (let i = 0; i <= N; i++) {
-    const t = i / N, w = Math.sin(Math.PI * Math.pow(t, 0.8)) * wid * (1 - 0.25 * t);
-    const s = i % 1 === 0 && i > 0 && i < N ? 1.18 : 1;
-    up.push([t * len, -w * s]); dn.push([t * len, w * s]);
-    if (i < N) { const tm = (i + 0.5) / N, wm = Math.sin(Math.PI * Math.pow(tm, 0.8)) * wid * (1 - 0.25 * tm) * 0.9; up.push([tm * len + len * 0.03, -wm]); dn.push([tm * len + len * 0.03, wm]); }
+  // 宽卵形薄荷叶，细锯齿；双线手绘感
+  const N = 8, pts = [];
+  const half = (sgn) => { const out = []; for (let i = 0; i <= N * 2; i++) { const t = i / (N * 2), w = Math.sin(Math.PI * Math.pow(t, 0.75)) * wid * (1 - 0.15 * t); const tooth = i % 2 ? 1.0 : 0.88; out.push([t * len, sgn * w * tooth]); } return out; };
+  for (let pass = 0; pass < 2; pass++) {
+    const j = pass ? 1.2 : 0; ctx.globalAlpha = pass ? 0.45 : 1;
+    const up = half(-1), dn = half(1).reverse();
+    ctx.beginPath(); ctx.moveTo(j, j); up.forEach(p => ctx.lineTo(p[0] + j, p[1] + j)); dn.forEach(p => ctx.lineTo(p[0] + j, p[1] + j)); ctx.closePath(); ctx.stroke();
   }
-  ctx.beginPath(); ctx.moveTo(0, 0); up.forEach(p => ctx.lineTo(p[0], p[1])); dn.reverse().forEach(p => ctx.lineTo(p[0], p[1])); ctx.closePath(); ctx.stroke();
-  ctx.beginPath(); ctx.moveTo(0, 0); ctx.quadraticCurveTo(len * 0.5, wid * 0.08, len * 0.95, 0); ctx.stroke();
-  for (let i = 1; i < 5; i++) { const x = len * i / 5.5; ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x + len * 0.14, -wid * 0.6 * Math.sin(Math.PI * i / 6)); ctx.moveTo(x, 0); ctx.lineTo(x + len * 0.14, wid * 0.6 * Math.sin(Math.PI * i / 6)); ctx.stroke(); }
+  ctx.globalAlpha = 1;
+  ctx.beginPath(); ctx.moveTo(0, 0); ctx.quadraticCurveTo(len * 0.5, wid * 0.06, len * 0.92, 0); ctx.stroke();
+  for (let i = 1; i < 5; i++) { const x = len * i / 5.8, w = wid * 0.7 * Math.sin(Math.PI * (i + 0.5) / 6); ctx.beginPath(); ctx.moveTo(x, 0); ctx.quadraticCurveTo(x + len * 0.08, -w * 0.5, x + len * 0.2, -w); ctx.moveTo(x, 0); ctx.quadraticCurveTo(x + len * 0.08, w * 0.5, x + len * 0.2, w); ctx.stroke(); }
 }
 function sprig(ctx, x, y, rot, sc, rnd) {
   ctx.save(); ctx.translate(x, y); ctx.rotate(rot); ctx.scale(sc, sc);
-  ctx.beginPath(); ctx.moveTo(0, 0); ctx.quadraticCurveTo(10, -90, 0, -190); ctx.stroke();
-  ctx.beginPath(); ctx.moveTo(4, 0); ctx.quadraticCurveTo(14, -90, 4, -190); ctx.stroke();
-  const nodes = [[-30, 62, 26], [-85, 72, 30], [-140, 60, 26], [-185, 40, 18]];
-  nodes.forEach(([yy, L, W], i) => {
-    for (const side of [-1, 1]) {
-      ctx.save(); ctx.translate(2, yy); ctx.rotate(side < 0 ? Math.PI + 0.55 + rnd() * 0.3 : -0.55 - rnd() * 0.3); leaf(ctx, L * (0.85 + rnd() * 0.3), W, rnd); ctx.restore();
-    }
+  ctx.beginPath(); ctx.moveTo(0, 0); ctx.quadraticCurveTo(8, -80, 0, -170); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(3, 0); ctx.quadraticCurveTo(11, -80, 3, -170); ctx.stroke();
+  const nodes = [[-40, 95, 46], [-110, 80, 40], [-165, 48, 26]];
+  nodes.forEach(([yy, L, W]) => {
+    for (const side of [-1, 1]) { ctx.save(); ctx.translate(2, yy); ctx.rotate(side < 0 ? Math.PI + 0.45 + rnd() * 0.35 : -0.45 - rnd() * 0.35); leaf(ctx, L * (0.85 + rnd() * 0.3), W * (0.9 + rnd() * 0.2), rnd); ctx.restore(); }
   });
+  ctx.save(); ctx.translate(1, -170); ctx.rotate(-Math.PI / 2); leaf(ctx, 40, 18, rnd); ctx.restore();
   ctx.restore();
 }
 export const LEAVES = [[300, 120, 0.15, 1.15], [650, 360, -0.5, 1.5], [20, 330, 1.0, 1.1], [215, 650, 0.35, 1.0], [600, 1000, -0.25, 1.1], [150, 1200, 0.45, 1.5], [710, 1250, -0.7, 1.2], [-10, 800, 0.7, 0.8]];
@@ -49,7 +48,7 @@ export function drawBackground(c, S, W, H, k) {
   ctx.putImageData(img, 0, 0);
   // 大尺度斑驳
   for (let i = 0; i < 40; i++) { ctx.fillStyle = `rgba(${rnd() < .5 ? '255,255,255' : '0,0,0'},${0.025 * S.bgNoise * 10})`; ctx.beginPath(); ctx.arc(rnd() * W, rnd() * H, 40 + rnd() * 120, 0, 7); ctx.fill(); }
-  ctx.save(); ctx.scale(k, k); ctx.strokeStyle = hexA(S.leafColor, S.leafOpacity); ctx.lineWidth = 1.5; ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+  ctx.save(); ctx.scale(k, k); ctx.strokeStyle = hexA(S.leafColor, S.leafOpacity); ctx.lineWidth = 1.7; ctx.lineJoin = 'round'; ctx.lineCap = 'round';
   LEAVES.forEach(([x, y, r, s]) => sprig(ctx, x, y, r, s * S.leafScale, rnd));
   ctx.restore();
 }

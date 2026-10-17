@@ -18,7 +18,7 @@ const PALM = [
   { pts: [[391, 785], [531, 785], [515, 842], [396, 846]], screws: [[452, 806]] },
   { pts: [[285, 765], [386, 781], [390, 846], [316, 841], [275, 802]], screws: [[327, 808]] },
 ];
-const BASE_PALM = [[235, 620], [300, 560], [400, 545], [500, 580], [590, 640], [570, 700], [555, 790], [530, 850], [503, 862], [503, 924], [302, 924], [302, 862], [260, 832], [215, 760], [190, 700]];
+const BASE_PALM = [[235, 620], [300, 560], [400, 545], [500, 580], [562, 652], [556, 722], [542, 792], [528, 850], [503, 862], [503, 924], [302, 924], [302, 862], [262, 832], [232, 770], [222, 700]];
 const EMPTY = [[400, 668]];
 // 隐藏底孔：被板盖住，板掉落后露出（保证 1 个初始空孔也可解）
 const HIDDEN = [[500, 812], [300, 812], [128, 576]];
@@ -34,7 +34,7 @@ export function referenceLevel() {
   const gap = 1.5;
   for (const f of FINGERS) {
     const pts = f.pts.map(([x, y]) => [x + OX, y + OY]);
-    base.capsules.push({ pts, w: f.w + 6 });
+    { const [t0, t1] = pts, dx = t1[0] - t0[0], dy = t1[1] - t0[1], l = Math.hypot(dx, dy), ins = f.w / 2 - 1; const cp = pts.slice(); cp[0] = [t0[0] + dx / l * ins, t0[1] + dy / l * ins]; base.capsules.push({ pts: cp, w: f.w + 4 }); }
     for (let i = 0; i < pts.length - 1; i++) {
       let a = pts[i], b = pts[i + 1];
       const dx = b[0] - a[0], dy = b[1] - a[1], L = Math.hypot(dx, dy);
