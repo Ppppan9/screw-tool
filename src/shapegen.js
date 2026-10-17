@@ -43,7 +43,7 @@ function partitioner(S, rnd, inside, area, layer) {
   const size = S.plateSize * (1 + layer * 0.15), r = S.partRandom, th = (S.partAngle + layer * 55) * Math.PI / 180, ca = Math.cos(th), sa = Math.sin(th);
   const style = S.partStyle;
   if (style === 'voronoi') {
-    const n = S.plateCount > 0 ? S.plateCount : Math.max(2, Math.round(area / (size * size)));
+    const n = S.plateCount > 0 ? S.plateCount : Math.max(2, Math.round(area / (size * size) * (S.vorDensity ?? 1)));
     const seeds = []; let t = 0; const md = Math.sqrt(area / n) * 0.75;
     while (seeds.length < n && t++ < 20000) { const p = inside(rnd); if (!p) continue; if (seeds.every(q => Math.hypot(q[0] - p[0], q[1] - p[1]) > md * (t < 8000 ? 1 : 0.6))) seeds.push(p); }
     const ani = 1 + r; // 沿主方向拉长 → 条状

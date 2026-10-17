@@ -57,12 +57,18 @@ export function drawBackground(c, S, W, H, k, bgImg) {
   LEAVES.forEach(([x, y, r, s]) => sprig(ctx, x, y, r, s * S.leafScale, rnd));
   ctx.restore();
 }
-function grain(ctx, bb, color, alpha, rnd, angle, density) {
-  ctx.save(); ctx.globalAlpha = alpha; ctx.strokeStyle = color; ctx.lineCap = 'round';
+function grain(ctx, bb, color, alpha, rnd, angle, density, wMin = 0.6, wRange = 1.4, lMin = 8, lRange = 30, blur = 0) {
+  if (blur > 0) {
+    // 先画到临时层，再整体模糊合成一次（逐笔 filter 很慢）
+    const t = document.createElement('canvas'); t.width = ctx.canvas.width; t.height = ctx.canvas.height; const tg = t.getContext('2d'); const m = ctx.getTransform(); tg.setTransform(m);
+    grain(tg, bb, color, 1, rnd, angle, density, wMin, wRange, lMin, lRange, 0);
+    ctx.save(); ctx.globalAlpha = Math.min(1, alpha); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.filter = `blur(${(blur * Math.hypot(m.a, m.b)).toFixed(2)}px)`; ctx.drawImage(t, 0, 0); ctx.restore(); return;
+  }
+  ctx.save(); ctx.globalAlpha = Math.min(1, alpha); ctx.strokeStyle = color; ctx.lineCap = 'round';
   const n = Math.floor((bb.w * bb.h) / 900 * density);
   for (let i = 0; i < n; i++) {
-    const x = bb.x + rnd() * bb.w, y = bb.y + rnd() * bb.h, L = 8 + rnd() * 30;
-    ctx.lineWidth = 0.6 + rnd() * 1.4; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + Math.cos(angle) * L, y + Math.sin(angle) * L); ctx.stroke();
+    const x = bb.x + rnd() * bb.w, y = bb.y + rnd() * bb.h, L = lMin + rnd() * lRange;
+    ctx.lineWidth = wMin + rnd() * wRange; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + Math.cos(angle) * L, y + Math.sin(angle) * L); ctx.stroke();
   }
   ctx.restore();
 }
@@ -87,8 +93,13 @@ export function drawBase(ctx, L, S) {
   ctx.save(); ctx.globalCompositeOperation = 'source-atop';
   const T = L.base.tex; if (T) ctx.drawImage(T.img, T.sx, T.sy, T.sw, T.sh, T.dx, T.dy, T.dw, T.dh);
   const all = L.base.polys.flat().concat(L.base.capsules.flatMap(c => c.pts)); const bb = bbox(all); bb.x -= 50; bb.y -= 50; bb.w += 100; bb.h += 100;
-  grain(ctx, bb, '#5a2c22', S.baseGrain, rnd, -0.5, 4); grain(ctx, bb, '#ffe0d0', S.baseGrain * 0.8, rnd, -0.5, 2);
+  // M-C 实测：参考底板亮笔触 #ebc4c6、暗笔触仅 #b07b71（亮度 sd 17）→ 暗纹弱、亮纹强且细密
+  grain(ctx, bb, '#7a3f33', S.baseGrain * 0.45, rnd, -0.62, 3, 0.8, 1.6, 10, 26);
+  grain(ctx, bb, '#fff1ee', S.baseGrain * 3, rnd, -0.62, 5, 0.8, 2.2, 8, 26, 0.6);
+  // 玻璃感内高光边（参考右缘/下缘可见白色亮边）
+  ctx.save(); ctx.translate(-1.2, -1.6); ctx.lineJoin = 'round'; ctx.lineWidth = 3.2; ctx.strokeStyle = `rgba(255,248,246,${S.baseGloss})`; basePath(ctx, L); ctx.stroke(); ctx.restore();
   ctx.restore();
+  ctx.save(); ctx.globalCompositeOperation = 'destination-over'; ctx.lineJoin = 'round'; ctx.lineWidth = S.outlineW + 3.5; ctx.strokeStyle = `rgba(235,245,235,${S.edgeHalo})`; basePath(ctx, L); ctx.stroke(); ctx.restore();
   ctx.strokeStyle = S.baseOutline; ctx.lineWidth = S.outlineW; ctx.lineJoin = 'round'; basePath(ctx, L); ctx.stroke();
   o.save(); o.setTransform(1, 0, 0, 1, 0, 0); o.drawImage(c2, 0, 0); o.restore();
 }
@@ -98,26 +109,37 @@ export function plateSprite(pl, S0, idx, dpr) {
   const c = document.createElement('canvas'); c.width = Math.ceil((bb.w + pad * 2) * dpr); c.height = Math.ceil((bb.h + pad * 2) * dpr);
   const ctx = c.getContext('2d'); ctx.scale(dpr, dpr); ctx.translate(pad - bb.x, pad - bb.y);
   const r = pl.radius * S.plateRadius, rnd = mulberry(100 + idx);
-  // 厚度
-  ctx.save(); ctx.translate(0, S.plateThick); shapePath(ctx, pl.poly, r, pl.smooth); ctx.fillStyle = S.plateShade; ctx.fill(); ctx.lineWidth = S.outlineW; ctx.strokeStyle = S.plateOutline; ctx.stroke(); ctx.restore();
-  // 面
+  // 外侧浅色光晕（参考描边外有一圈浅色，bg halo p95 #90a595 vs 远处 #668572）
+  if (S.edgeHalo > 0) { shapePath(ctx, pl.poly, r, pl.smooth); ctx.lineJoin = 'round'; ctx.lineWidth = S.outlineW + 3.5; ctx.strokeStyle = `rgba(235,240,250,${S.edgeHalo})`; ctx.stroke(); }
+  // 厚度（参考几乎不可见：底部 1~2px 暗边）
+  if (S.plateThick > 0) { ctx.save(); ctx.translate(0, S.plateThick); shapePath(ctx, pl.poly, r, pl.smooth); ctx.fillStyle = S.plateShade; ctx.fill(); ctx.lineWidth = S.outlineW; ctx.strokeStyle = S.plateOutline; ctx.stroke(); ctx.restore(); }
+  // 面：薰衣草，中心 #bdb5ea，左上更亮
   shapePath(ctx, pl.poly, r, pl.smooth);
-  const g = ctx.createLinearGradient(bb.x, bb.y, bb.x + bb.w * 0.6, bb.y + bb.h); g.addColorStop(0, shade(S.plateColor, 0.35)); g.addColorStop(0.5, S.plateColor); g.addColorStop(1, shade(S.plateColor, -0.08));
+  const g = ctx.createLinearGradient(bb.x, bb.y, bb.x + bb.w * 0.6, bb.y + bb.h); g.addColorStop(0, shade(S.plateColor, 0.3)); g.addColorStop(0.45, S.plateColor); g.addColorStop(1, shade(S.plateColor, -0.1));
   ctx.fillStyle = g; ctx.fill();
   ctx.save(); ctx.clip();
-  grain(ctx, bb, '#ffffff', S.plateGrain, rnd, -0.42, 3);
-  grain(ctx, bb, '#6b5f9c', S.plateGrain * 0.45, rnd, -0.42, 2);
-  // 内高光边
-  shapePath(ctx, pl.poly, r, pl.smooth); ctx.lineWidth = 5; ctx.strokeStyle = 'rgba(255,255,255,0.35)'; ctx.stroke();
+  // 铅笔排线（参考亮度 sd≈51：亮白/暗紫斜向细笔触，对比强）
+  grain(ctx, bb, '#ffffff', S.plateGrain * 1.8, rnd, -0.6, 3.5, 0.6, 1.6, 12, 40, 0.5);
+  grain(ctx, bb, '#463a7c', S.plateGrain * 1.0, rnd, -0.6, 1.6, 0.5, 1.0, 8, 30, 0.5);
+  // 光泽白边：沿轮廓内侧的强白高光（参考 p95 ≈ #fef9ff），左上更强
+  if (S.plateGloss > 0) {
+    ctx.save(); ctx.filter = 'blur(1.2px)';
+    shapePath(ctx, pl.poly, r, pl.smooth); ctx.lineWidth = 12; ctx.strokeStyle = `rgba(255,255,255,${S.plateGloss * 0.5})`; ctx.stroke();
+    ctx.translate(1.5, 1.8); shapePath(ctx, pl.poly, r, pl.smooth); ctx.lineWidth = 6; ctx.strokeStyle = `rgba(255,253,255,${S.plateGloss})`; ctx.stroke();
+    ctx.restore();
+    // 右下内侧淡暗边（立体感）
+    ctx.save(); ctx.translate(-2.5, -3.5); shapePath(ctx, pl.poly, r, pl.smooth); ctx.lineWidth = 4; ctx.strokeStyle = 'rgba(70,55,120,0.28)'; ctx.stroke(); ctx.restore();
+  }
   ctx.restore();
-  shapePath(ctx, pl.poly, r, pl.smooth); ctx.lineWidth = S.outlineW; ctx.strokeStyle = S.plateOutline; ctx.stroke();
+  shapePath(ctx, pl.poly, r, pl.smooth); ctx.lineJoin = 'round'; ctx.lineWidth = S.outlineW; ctx.strokeStyle = S.plateOutline; ctx.stroke();
   return { c, x: bb.x - pad, y: bb.y - pad, w: bb.w + pad * 2, h: bb.h + pad * 2 };
 }
 export function drawHole(ctx, x, y, S) {
+  // 参考：深红棕孔内 #2c160f，下缘奶白色斜面月牙（孔壁受光），上缘略暗凹陷
   const r = S.holeSize / 2;
-  ctx.beginPath(); ctx.arc(x, y, r + 2.5, 0, 7); ctx.fillStyle = 'rgba(255,240,235,0.55)'; ctx.fill();
-  ctx.beginPath(); ctx.arc(x, y, r, 0, 7); const g = ctx.createRadialGradient(x, y - r * 0.4, r * 0.1, x, y, r); g.addColorStop(0, S.holeColor); g.addColorStop(1, shade(S.holeColor, 0.15)); ctx.fillStyle = g; ctx.fill();
-  ctx.lineWidth = 1.5; ctx.strokeStyle = 'rgba(0,0,0,0.6)'; ctx.stroke();
+  ctx.beginPath(); ctx.arc(x, y, r + 3.2, 0, 7); const gr = ctx.createLinearGradient(x, y - r - 3, x, y + r + 3); gr.addColorStop(0, 'rgba(90,40,35,0.35)'); gr.addColorStop(0.45, 'rgba(255,235,228,0.35)'); gr.addColorStop(1, 'rgba(255,250,246,0.8)'); ctx.fillStyle = gr; ctx.fill();
+  ctx.beginPath(); ctx.arc(x + 0.6, y - 1.2, r, 0, 7); const g = ctx.createRadialGradient(x, y - r * 0.3, r * 0.1, x, y, r * 1.05); g.addColorStop(0, S.holeColor); g.addColorStop(0.75, S.holeColor); g.addColorStop(1, shade(S.holeColor, 0.18)); ctx.fillStyle = g; ctx.fill();
+  ctx.lineWidth = 1; ctx.strokeStyle = 'rgba(20,5,5,0.55)'; ctx.stroke();
 }
 // part: 'all' | 'shadow' | 'shank' | 'head' | 'cross'（AE 导出把螺丝拆成独立图层）
 export function drawScrew(ctx, x, y, S, ang, lift, sc, part = 'all') {
@@ -139,18 +161,25 @@ export function drawScrew(ctx, x, y, S, ang, lift, sc, part = 'all') {
     y = y - lift;
   }
   if (all || part === 'head') {
+    // 参考：拉丝银（扇形明暗交替，随螺丝旋转），主体 #9f9ac2、高光近白、细暗边 #30274d，无内圈
     ctx.beginPath(); ctx.arc(x, y, R, 0, 7);
-    const g = ctx.createRadialGradient(x - R * 0.35, y - R * 0.35, R * 0.1, x, y, R); g.addColorStop(0, shade(S.screwColor, 0.6)); g.addColorStop(0.65, S.screwColor); g.addColorStop(1, S.screwDark);
-    ctx.fillStyle = g; ctx.fill(); ctx.lineWidth = Math.max(1.5, S.outlineW * 0.9); ctx.strokeStyle = S.plateOutline; ctx.stroke();
-    ctx.beginPath(); ctx.arc(x, y, R * 0.78, 0, 7); ctx.lineWidth = 1; ctx.strokeStyle = 'rgba(80,70,110,0.45)'; ctx.stroke();
+    const g = ctx.createRadialGradient(x - R * 0.35, y - R * 0.35, R * 0.1, x, y, R); g.addColorStop(0, shade(S.screwColor, 0.55)); g.addColorStop(0.6, S.screwColor); g.addColorStop(1, S.screwDark);
+    ctx.fillStyle = g; ctx.fill();
+    if (S.screwBrush > 0 && ctx.createConicGradient) {
+      const cg = ctx.createConicGradient(ang + 0.6, x, y), K = 4;
+      for (let i = 0; i <= K * 2; i++) { const lt = i % 2 === 0; cg.addColorStop(Math.min(1, (i + (lt ? 0 : 0.2)) / (K * 2)), lt ? `rgba(255,255,255,${0.9 * S.screwBrush})` : `rgba(50,42,90,${0.7 * S.screwBrush})`); }
+      ctx.save(); ctx.globalAlpha = 1; ctx.fillStyle = cg; ctx.beginPath(); ctx.arc(x, y, R * 0.97, 0, 7); ctx.fill(); ctx.restore();
+    }
+    ctx.lineWidth = S.screwRimW; ctx.strokeStyle = S.screwRim; ctx.beginPath(); ctx.arc(x, y, R - S.screwRimW / 2, 0, 7); ctx.stroke();
   }
   if (!all && part !== 'cross') return;
   // 十字槽
   ctx.save(); ctx.translate(x, y); ctx.rotate(ang);
-  const L = R * 0.62, T = R * 0.17;
+  // 参考：细十字（臂长≈0.56R、宽≈0.22R），两端略收窄，下侧细亮边
+  const L = R * S.crossLen, T = R * S.crossW / 2;
   for (const a of [0, Math.PI / 2]) {
-    ctx.save(); ctx.rotate(a); ctx.beginPath(); ctx.roundRect ? ctx.roundRect(-L, -T, L * 2, T * 2, T) : ctx.rect(-L, -T, L * 2, T * 2); ctx.fillStyle = S.screwCross; ctx.fill(); ctx.restore();
+    ctx.save(); ctx.rotate(a); ctx.beginPath(); ctx.moveTo(-L, -T * 0.7); ctx.quadraticCurveTo(0, -T * 1.25, L, -T * 0.7); ctx.arc(L, 0, T * 0.7, -Math.PI / 2, Math.PI / 2); ctx.quadraticCurveTo(0, T * 1.25, -L, T * 0.7); ctx.arc(-L, 0, T * 0.7, Math.PI / 2, Math.PI * 1.5); ctx.fillStyle = S.screwCross; ctx.fill(); ctx.restore();
   }
-  ctx.strokeStyle = 'rgba(255,255,255,0.5)'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(-L, T + 1); ctx.lineTo(-T, T + 1); ctx.moveTo(T + 1, L); ctx.lineTo(T + 1, T); ctx.stroke();
+  ctx.strokeStyle = 'rgba(255,255,255,0.55)'; ctx.lineWidth = 0.9; ctx.beginPath(); ctx.moveTo(-L, T + 0.9); ctx.lineTo(-T, T + 0.9); ctx.moveTo(T + 0.9, L); ctx.lineTo(T + 0.9, T); ctx.stroke();
   ctx.restore();
 }

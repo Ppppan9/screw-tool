@@ -19,3 +19,13 @@ export function chaikin(poly, iters = 3) {
 export const smoothPoly = (poly, eps = 1.6, iters = 3) => poly.length < 4 ? poly : chaikin(rdpClosed(poly, eps), iters);
 export function polyArea(p) { let a = 0; for (let i = 0; i < p.length; i++) { const q = p[i], r = p[(i + 1) % p.length]; a += q[0] * r[1] - r[0] * q[1]; } return a / 2; }
 export function smoothPathCtx(ctx, poly) { ctx.moveTo(poly[0][0], poly[0][1]); for (let i = 1; i < poly.length; i++) ctx.lineTo(poly[i][0], poly[i][1]); ctx.closePath(); }
+// 闭合多边形按顶点法线内缩(d>0)/外扩(d<0)；用于密集平滑轮廓（M-C：参考手形底板内缩，使手指处粉边与参考一致）
+export function offsetPoly(p, d) {
+  const n = p.length, s = Math.sign(polyArea(p)) || 1, o = [];
+  for (let i = 0; i < n; i++) {
+    const a = p[(i - 1 + n) % n], b = p[(i + 1) % n]; let tx = b[0] - a[0], ty = b[1] - a[1]; const l = Math.hypot(tx, ty) || 1;
+    // 按面积符号取朝内法线（已用参考手形验证：d=3 面积减小）
+    o.push([p[i][0] - s * ty / l * d, p[i][1] + s * tx / l * d]);
+  }
+  return o;
+}

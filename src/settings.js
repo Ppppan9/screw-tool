@@ -1,5 +1,5 @@
 // 设置定义：所有可调参数。版本号 + 迁移。
-export const SETTINGS_VERSION = 5;
+export const SETTINGS_VERSION = 6;
 export const STORE_KEY = 'screwTool.settings';
 // [key, 标签, 类型, 默认, min, max, step]  类型: range/color/bool/select/text/file
 export const GROUPS = [
@@ -36,6 +36,7 @@ export const GROUPS = [
     ['partStyle', '切分风格', 'select', 'strip', [['strip', '条状分段（参考手指风格）'], ['voronoi', 'Voronoi 拉长块'], ['grid', '网格']]],
     ['plateSize', '目标板尺寸(px)', 'range', 110, 50, 260, 2],
     ['plateCount', '板数(Voronoi，0=按尺寸)', 'range', 0, 0, 60, 1],
+    ['vorDensity', 'Voronoi 自动板数倍率(板数=0 时)', 'range', 2.2, 0.5, 5, 0.1],
     ['partAngle', '条带方向(度)', 'range', 90, 0, 180, 1],
     ['partRandom', '随机度', 'range', 0.5, 0, 1, 0.01],
     ['shapeSeed', '图形关卡种子', 'range', 1, 1, 9999, 1],
@@ -60,23 +61,31 @@ export const GROUPS = [
     ['leafOpacity', '薄荷叶线稿透明度', 'range', 0.35, 0, 1, 0.01],
     ['leafColor', '叶子线条色', 'color', '#eef3ea'],
     ['leafScale', '叶子大小', 'range', 1, 0.5, 2, 0.05],
-    ['baseColor', '底板颜色', 'color', '#bd8784'],
-    ['baseGrain', '底板木纹强度', 'range', 0.18, 0, 0.6, 0.01],
-    ['baseOutline', '底板描边色', 'color', '#4a2626'],
-    ['plateColor', '板块颜色', 'color', '#c9c1ee'],
-    ['plateShade', '板块厚度边颜色', 'color', '#7b70ad'],
-    ['plateThick', '板块厚度(px)', 'range', 3, 0, 14, 0.5],
-    ['plateGrain', '板块木纹/排线强度', 'range', 0.28, 0, 1, 0.01],
-    ['plateOutline', '板块描边色', 'color', '#352840'],
-    ['outlineW', '描边宽度', 'range', 2.6, 0, 6, 0.1],
+    ['baseColor', '底板颜色', 'color', '#bf8a80'],
+    ['baseGrain', '底板木纹强度', 'range', 0.16, 0, 0.6, 0.01],
+    ['baseOutline', '底板描边色', 'color', '#3a1d1c'],
+    ['baseGloss', '底板内侧白色亮边', 'range', 0.5, 0, 1, 0.01],
+    ['edgeHalo', '描边外浅色光晕', 'range', 0.28, 0, 1, 0.01],
+    ['plateColor', '板块颜色', 'color', '#bfb7ee'],
+    ['plateShade', '板块厚度边颜色', 'color', '#5d5394'],
+    ['plateThick', '板块厚度(px)', 'range', 1.5, 0, 14, 0.5],
+    ['plateGrain', '板块木纹/排线强度', 'range', 0.3, 0, 1, 0.01],
+    ['plateOutline', '板块描边色', 'color', '#261729'],
+    ['plateGloss', '板块光泽白边强度', 'range', 0.85, 0, 1, 0.01],
+    ['outlineW', '描边宽度', 'range', 2.1, 0, 6, 0.1],
     ['plateRadius', '板块圆角倍率', 'range', 1, 0, 2, 0.05],
-    ['plateShadow', '板块投影', 'range', 0.25, 0, 1, 0.01],
-    ['screwSize', '螺丝直径(px)', 'range', 42, 16, 70, 1],
-    ['screwColor', '螺丝主色', 'color', '#dcd8fb'],
-    ['screwDark', '螺丝暗部色', 'color', '#6d6890'],
-    ['screwCross', '十字槽颜色', 'color', '#3c3a4c'],
+    ['plateShadow', '板块投影', 'range', 0.18, 0, 1, 0.01],
+    ['screwSize', '螺丝直径(px)', 'range', 40, 16, 70, 1],
+    ['screwColor', '螺丝主色', 'color', '#c4bfe6'],
+    ['screwDark', '螺丝暗部色', 'color', '#5f5a86'],
+    ['screwBrush', '螺丝拉丝明暗强度', 'range', 0.6, 0, 1, 0.01],
+    ['screwRim', '螺丝边缘色', 'color', '#30274d'],
+    ['screwRimW', '螺丝边缘宽度', 'range', 1.6, 0, 5, 0.1],
+    ['screwCross', '十字槽颜色', 'color', '#2a2748'],
+    ['crossLen', '十字槽臂长(×半径)', 'range', 0.6, 0.2, 0.9, 0.01],
+    ['crossW', '十字槽宽(×半径)', 'range', 0.34, 0.05, 0.5, 0.01],
     ['holeSize', '孔直径(px)', 'range', 30, 12, 60, 1],
-    ['holeColor', '孔颜色', 'color', '#26150f'],
+    ['holeColor', '孔颜色', 'color', '#2a140d'],
   ]],
   ['动画时长', [
     ['liftDur', '拧出/抬起时长(ms)', 'range', 140, 30, 800, 10],
@@ -167,6 +176,8 @@ export function migrate(obj) {
   if (v < 4) v = 4;
   // v4 -> v5：新增“导入透明图形生成关卡”参数——只补默认值
   if (v < 5) v = 5;
+  // v5 -> v6（M-C 材质对齐参考帧实测）：仍等于旧默认值的视觉参数替换为新默认；新增参数只补默认
+  if (v < 6) { const OLD = { baseColor: '#bd8784', baseGrain: 0.18, baseOutline: '#4a2626', plateColor: '#c9c1ee', plateShade: '#7b70ad', plateThick: 3, plateGrain: 0.28, plateOutline: '#352840', outlineW: 2.6, plateShadow: 0.25, screwSize: 42, screwColor: '#dcd8fb', screwDark: '#6d6890', screwCross: '#3c3a4c', holeColor: '#26150f' }; for (const k in OLD) if (s[k] === OLD[k]) delete s[k]; v = 6; }
   const out = { ...DEFS };
   for (const k in DEFS) if (k in s && typeof s[k] === typeof DEFS[k]) out[k] = s[k];
   return out;
