@@ -1,6 +1,7 @@
 import { levelFromImage, defaultShapeCanvas } from './shapegen.js';
 import { newBody, stepBody, toWorld as bodyToWorld } from './physics.js';
-import { referenceLevel, generateLevel, initState, holeUsable, screwFree, applyMove, pickHole, solve, done, setBlocking, platePins, coverInfo, liftOut, cancelLift } from './level.js';
+import { referenceLevel, generateLevel, initState, holeUsable, screwFree, applyMove, pickHole, solve, done, setBlocking, platePins, coverInfo, liftOut, cancelLift, setPhysicsRules, pointInPoly, ALIGN_TOL, EDGE_TOL } from './level.js';
+import { toLocal as bodyToLocal } from './physics.js';
 import { GROUPS, DEFS, loadSettings, saveSettings, migrate, exportJSON } from './settings.js';
 import { drawBackground, drawBase, plateSprite, drawHole, drawScrew } from './render.js';
 import { Sfx } from './audio.js';
@@ -39,7 +40,7 @@ function imageLevel() {
   return shapeCache.img ? levelFromImage(shapeCache.img, S, S.shapeSeed) : levelFromImage(defaultShapeCanvas(), S, S.shapeSeed);
 }
 function newGame() {
-  setBlocking(S.screwBlock);
+  setBlocking(S.screwBlock); setPhysicsRules({ swingMax: S.swingMax, releaseAt: S.releaseAt });
   autoToken++; autoRunning = false; updAutoBtn();
   L = S.level === 'random' ? generateLevel(S, S.seed) : S.level === 'image' ? imageLevel() : referenceLevel();
   st = initState(L); active = null; lastVacated = -1; finishedAt = 0; endShownAt = 0;
@@ -64,8 +65,22 @@ function rebuild() {
 
 // ---------- 动画 ----------
 // 孔的世界坐标：属于被摆动/移位的板时随板变换
-function holeOwner(hi) { let o = -1; L.plates.forEach((p, pi) => { const b = plateVis[pi]; if ((b.s === 'on' || b.s === 'swing') && p.holes.includes(hi) && (o < 0 || p.layer >= L.plates[o].layer)) o = pi; }); return o; }
-function holeWorld(hi) { const h = L.holes[hi], o = holeOwner(hi); if (o < 0 || !plateVis[o].posed) return [h.x, h.y]; return bodyToWorld(plateVis[o], h.x, h.y); }
+// v1.5：可放螺丝的孔都在底板上，位置固定（板自己的孔随板移动，只用于绘制）
+function holeWorld(hi) { const h = L.holes[hi]; return [h.x, h.y]; }
+// 画面上此刻是否有板压住底板孔 hi：逻辑上已掉落/正在下落的板仍在画面里时，只要材料盖住该孔就不能放（下落板不提供任何孔位）
+function visBlocked(hi) {
+  const h = L.holes[hi];
+  return L.plates.some((p, pi) => {
+    const b = plateVis[pi]; if (b.s === 'gone' || !(st.removed.has(pi) || b.s === 'fall' || b.posed)) return false;
+    const [lx, ly] = b.posed ? bodyToLocal(b, h.x, h.y) : [h.x, h.y];
+    const covered = pointInPoly(lx, ly, p.poly) || p.poly.some((q, i) => { const r = p.poly[(i + 1) % p.poly.length], dx = r[0] - q[0], dy = r[1] - q[1], t = Math.max(0, Math.min(1, ((lx - q[0]) * dx + (ly - q[1]) * dy) / (dx * dx + dy * dy || 1))); return Math.hypot(q[0] + t * dx - lx, q[1] + t * dy - ly) < EDGE_TOL; });
+    if (!covered) return false;
+    if (b.s === 'fall' || st.removed.has(pi)) return true;
+    // 摆动/有位姿的板：只有自己的孔（随板移动后）仍对准该底板孔才不挡
+    return !p.holes.some(k => { const w = bodyToWorld(b, L.holes[k].x, L.holes[k].y); return Math.hypot(w[0] - h.x, w[1] - h.y) <= ALIGN_TOL; });
+  });
+}
+function holeTargetable(hi) { return holeUsable(L, st, hi) && !visBlocked(hi); }
 function screwPos(si) { return holeWorld(st.screwHole[si]); }
 // 视觉固定：vHole[si] = 该螺丝视觉上“坐在”的孔（-1 = 不固定）。参考：拧走的螺丝在目标孔落座后 releaseDelay 才释放原板
 function schedPin(si, hi, t) { pend = pend.filter(q => q.si !== si); pend.push({ si, hi, t }); }
@@ -211,7 +226,7 @@ function drawHand() {
 
 // ---------- 交互 ----------
 function hitScrew(x, y) { let best = -1, bd = S.screwSize * 0.65; st.screwHole.forEach((h, si) => { const hw = holeWorld(h), d = Math.hypot(hw[0] - x, hw[1] - y); if (d < bd && screwFree(L, st, si)) { bd = d; best = si; } }); return best; }
-function hitHole(x, y) { let best = -1, bd = Math.max(S.holeSize, S.screwSize) * 0.8; L.holes.forEach((h, hi) => { const hw = holeWorld(hi), d = Math.hypot(hw[0] - x, hw[1] - y); if (d < bd && holeUsable(L, st, hi)) { bd = d; best = hi; } }); return best; }
+function hitHole(x, y) { let best = -1, bd = Math.max(S.holeSize, S.screwSize) * 0.8; L.holes.forEach((h, hi) => { const hw = holeWorld(hi), d = Math.hypot(hw[0] - x, hw[1] - y); if (d < bd && holeTargetable(hi)) { bd = d; best = hi; } }); return best; }
 function tapAt(px, py) { // 设计坐标
   sfx.resume();
   const v = view(), w = { x: (px - v.tx) / v.b, y: (py - v.ty) / v.b };
@@ -279,6 +294,7 @@ async function autoSolve() {
       const w0 = holeWorld(st.screwHole[si]), w1 = holeWorld(hi), h0 = { x: w0[0], y: w0[1] }, h1 = { x: w1[0], y: w1[1] };
       if (S.moveRule === 'tap2') {
         await tapWorld(h0.x, h0.y, tok); await waitIdle(tok); await wait(S.autoSelectGap, tok);
+        { const tw = now(); while (!holeTargetable(hi) && now() - tw < 4000) { if (tok !== autoToken) throw 'stop'; await new Promise(r => requestAnimationFrame(r)); } }
         await tapWorld(h1.x, h1.y, tok);
       } else {
         const save = S.moveRule; S.moveRule = 'tap2';
@@ -370,7 +386,7 @@ function loop(t) {
 const REBUILD_KEYS = /^(canvas|bg|leaf|base|plate|outline|board)/, NEWGAME_KEYS = /^(level|seed|emptyHoles|screwsPerPlate|gen|screwBlock|shape|part|seamW|edgeInset|minPlateArea|img|screwEdgeMin|layerOverlap|plateSize|plateCount|plateTint|baseFill)/;
 function applyChange(k) {
   if (k === 'shapeImg' && S.shapeImg) S.level = 'image';
-  saveSettings(S);
+  saveSettings(S); setPhysicsRules({ swingMax: S.swingMax, releaseAt: S.releaseAt });
   if (NEWGAME_KEYS.test(k)) newGame(); else if (REBUILD_KEYS.test(k)) rebuild();
   if (k === 'handImage') loadHand();
   if (k === 'bgm' || k === 'bgmVol') { if (k === 'bgm') sfx.setBgm(S.bgm, S.bgmVol); else if (sfx.bgmGain) sfx.bgmGain.gain.value = S.bgmVol; }
@@ -416,6 +432,6 @@ document.getElementById('btnExport').onclick = () => { const a = document.create
 document.getElementById('btnImport').onclick = () => document.getElementById('importFile').click();
 document.getElementById('importFile').onchange = (e) => { const f = e.target.files[0]; if (!f) return; f.text().then(t => { S = migrate(JSON.parse(t)); saveSettings(S); buildPanel(); loadHand(); sfx.setBgm(S.bgm, S.bgmVol); newGame(); toast('已导入设置'); }).catch(() => toast('导入失败')); };
 document.getElementById('btnReset').onclick = () => { if (!confirm('恢复全部默认设置？')) return; S = { ...DEFS }; saveSettings(S); buildPanel(); loadHand(); newGame(); };
-window.__game = { holeWorld: (hi) => holeWorld(hi), view: () => view(), tapHole: (hi) => { const w = holeWorld(hi), v = view(); return tapAt(w[0] * v.b + v.tx, w[1] * v.b + v.ty); }, get vHole() { return vHole; }, doExportAE, doExport3D, aeRec, aeStart: () => recStart(), aeStop: () => aeStop(), aeActive: () => aeActive(), get aeLastRec() { return aeLastRec; }, get mediaRec() { return rec; }, autoSolve, newGame, get S() { return S; }, set(k, v) { S[k] = v; applyChange(k); buildPanel(); }, get st() { return st; }, get L() { return L; }, get plateVis() { return plateVis; }, get screwVis() { return screwVis; }, startRec, stopRec };
+window.__game = { holeWorld: (hi) => holeWorld(hi), holeTargetable: (hi) => holeTargetable(hi), visBlocked: (hi) => visBlocked(hi), view: () => view(), tapHole: (hi) => { const w = holeWorld(hi), v = view(); return tapAt(w[0] * v.b + v.tx, w[1] * v.b + v.ty); }, get vHole() { return vHole; }, doExportAE, doExport3D, aeRec, aeStart: () => recStart(), aeStop: () => aeStop(), aeActive: () => aeActive(), get aeLastRec() { return aeLastRec; }, get mediaRec() { return rec; }, autoSolve, newGame, get S() { return S; }, set(k, v) { S[k] = v; applyChange(k); buildPanel(); }, get st() { return st; }, get L() { return L; }, get plateVis() { return plateVis; }, get screwVis() { return screwVis; }, startRec, stopRec };
 buildPanel(); loadHand(); newGame(); if (S.bgm) sfx.setBgm(S.bgm, S.bgmVol);
 requestAnimationFrame(loop);
