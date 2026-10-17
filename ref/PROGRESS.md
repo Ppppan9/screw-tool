@@ -28,3 +28,8 @@
 - 测试 test/shape-test.mjs + test/assets/shapes/{heart,star_hole,cat}.png → screenshots/import_shape_samples.jpg。
 - shape-test 结果：heart 25 板/1 次尝试、star_hole 8 板(Voronoi,带内孔)/7 次、cat 19 板 2 层(图片纹理底板+图片着色)/18 次，三者自动通关完成。种子重试 24 次，每 4 次失败多加 1 个空孔。
 - 剩余：M-C 材质对照未做；AE/3D 导出对图形关卡未单独跑自动测试（代码路径相同，3D 底板支持内孔）。
+
+## v1.2.1（紧急修复，完成）拧出的螺丝不再阻挡板块掉落
+- level.js：settle()/liftOut()/cancelLift()；platePins 忽略拧出中的螺丝；applyMove 先“螺丝离孔”结算掉落再落孔（求解器同步）。
+- main.js：拧出（第一次点击）即结算，板在 t_tap+liftDur+fallDelay 开始下落；取消放回重新固定；飞行中不再等落孔。
+- 测试：logic-test 新增 6 项（悬停中掉落、取消重固定、飞往被释放板下的孔）；test/fall-timing.mjs 实测 187ms（参考 ~200ms）。

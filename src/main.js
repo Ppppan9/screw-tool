@@ -1,5 +1,5 @@
 import { levelFromImage, defaultShapeCanvas } from './shapegen.js';
-import { referenceLevel, generateLevel, initState, holeUsable, screwFree, applyMove, pickHole, solve, done, setBlocking, platePins, coverInfo } from './level.js';
+import { referenceLevel, generateLevel, initState, holeUsable, screwFree, applyMove, pickHole, solve, done, setBlocking, platePins, coverInfo, liftOut, cancelLift } from './level.js';
 import { GROUPS, DEFS, loadSettings, saveSettings, migrate, exportJSON } from './settings.js';
 import { drawBackground, drawBase, plateSprite, drawHole, drawScrew } from './render.js';
 import { Sfx } from './audio.js';
@@ -63,8 +63,10 @@ function liftScrew(si) {
   const v = screwVis[si], t0 = now(); const [x, y] = screwPos(si);
   v.x = x; v.y = y; v.anim = { k: 'lift', t0, a0: v.ang, l0: v.lift };
   sfx.ratchet(S.liftDur / 1000, S, true);
+  // 拧出完成（离开孔）时，不再被任何螺丝固定的板开始下落（参考：点击后约 0.17s）
+  const fell = liftOut(L, st, si); fell.forEach(pi => { plateVis[pi].s = 'wait'; plateVis[pi].t0 = t0 + S.liftDur + S.fallDelay; });
 }
-function dropBack(si) { const v = screwVis[si]; v.anim = { k: 'down', t0: now(), a0: v.ang, l0: v.lift }; sfx.ratchet(S.screwInDur / 1000, S, false); }
+function dropBack(si) { cancelLift(st, si); const v = screwVis[si]; v.anim = { k: 'down', t0: now(), a0: v.ang, l0: v.lift }; sfx.ratchet(S.screwInDur / 1000, S, false); }
 function sendScrew(si, hi) {
   const v = screwVis[si], from = screwPos(si), to = [L.holes[hi].x, L.holes[hi].y];
   const vac = st.screwHole[si];
@@ -72,7 +74,7 @@ function sendScrew(si, hi) {
   const t0 = now();
   v.anim = { k: 'fly', t0, from, to, a0: v.ang, l0: v.lift || S.liftH, sc0: v.sc };
   const tLand = t0 + S.flyDur + S.screwInDur;
-  fell.forEach(pi => { plateVis[pi].s = 'wait'; plateVis[pi].t0 = tLand + S.fallDelay; });
+  fell.forEach(pi => { plateVis[pi].s = 'wait'; plateVis[pi].t0 = t0 + S.fallDelay; });
   return fell;
 }
 function step(t, dt) {
@@ -385,6 +387,6 @@ document.getElementById('btnExport').onclick = () => { const a = document.create
 document.getElementById('btnImport').onclick = () => document.getElementById('importFile').click();
 document.getElementById('importFile').onchange = (e) => { const f = e.target.files[0]; if (!f) return; f.text().then(t => { S = migrate(JSON.parse(t)); saveSettings(S); buildPanel(); loadHand(); sfx.setBgm(S.bgm, S.bgmVol); newGame(); toast('已导入设置'); }).catch(() => toast('导入失败')); };
 document.getElementById('btnReset').onclick = () => { if (!confirm('恢复全部默认设置？')) return; S = { ...DEFS }; saveSettings(S); buildPanel(); loadHand(); newGame(); };
-window.__game = { doExportAE, doExport3D, aeRec, autoSolve, newGame, get S() { return S; }, set(k, v) { S[k] = v; applyChange(k); buildPanel(); }, get st() { return st; }, get L() { return L; }, startRec, stopRec };
+window.__game = { doExportAE, doExport3D, aeRec, autoSolve, newGame, get S() { return S; }, set(k, v) { S[k] = v; applyChange(k); buildPanel(); }, get st() { return st; }, get L() { return L; }, get plateVis() { return plateVis; }, get screwVis() { return screwVis; }, startRec, stopRec };
 buildPanel(); loadHand(); newGame(); if (S.bgm) sfx.setBgm(S.bgm, S.bgmVol);
 requestAnimationFrame(loop);

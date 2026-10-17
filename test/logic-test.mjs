@@ -1,5 +1,5 @@
 // 螺丝阻挡判定单元测试：esbuild 打包后在 Node 里运行（npm run test:logic）
-import { initState, applyMove, holeUsable, screwFree, platePins, setBlocking, solve, referenceLevel, generateLevel, done } from '../src/level.js';
+import { liftOut, cancelLift, initState, applyMove, holeUsable, screwFree, platePins, setBlocking, solve, referenceLevel, generateLevel, done } from '../src/level.js';
 import { DEFS } from '../src/settings.js';
 let fails = 0; const ok = (c, m) => { console.log((c ? 'PASS ' : 'FAIL ') + m); if (!c) fails++; };
 function mini() {
@@ -33,4 +33,19 @@ setBlocking(true);
   ok(!!plan && done(L, s2), `参考关卡在阻挡规则下可解（${plan ? plan.length : '-'} 步）`);
 }
 { let n = 0; for (let seed = 1; seed <= 3; seed++) { const L = generateLevel({ ...DEFS, genLayers: 2 }, seed); const p = solve(L, initState(L)); if (p) n++; } ok(n === 3, `随机关卡（2 层）3/3 可解：${n}`); }
+{ // v1.2.1：最后一颗螺丝拧出（悬停/飞行中，未落孔）时板即掉落
+  const L = mini(), st = initState(L);
+  applyMove(L, st, 0, 2);
+  const f = liftOut(L, st, 1); ok(f.includes(1) && f.includes(0), '拧出 B 的螺丝（悬停中、尚未落孔）B 与 A 立即掉落 ' + JSON.stringify(f));
+  ok(st.screwHole[1] === 1, '悬停螺丝仍记在原孔（未落孔）');
+  const f2 = applyMove(L, st, 1, 3); ok(f2.length === 0 && done(L, st), '落孔时不再重复掉落，关卡完成');
+}
+{ // 取消选择：拧出后放回，未掉落的板重新被固定
+  const L = mini(), st = initState(L); const f = liftOut(L, st, 0); ok(f.length === 0, '拧出 A 自己的螺丝，A 仍被 B 螺丝挡住');
+  cancelLift(st, 0); ok(platePins(L, st, 0).length === 2, '取消后 A 重新被 2 颗螺丝固定');
+}
+{ // 目标孔在被释放的板下：先结算掉落再落孔，不会被自己挡住
+  const L = mini(); L.holes.push({ x: 280, y: 110 }); const st = initState(L); applyMove(L, st, 0, 2);
+  const f = applyMove(L, st, 1, 4); ok(f.includes(0) && f.includes(1), '螺丝飞往被释放板下的孔：板照常掉落 ' + JSON.stringify(f));
+}
 process.exit(fails ? 1 : 0);

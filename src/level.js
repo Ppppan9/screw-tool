@@ -55,7 +55,7 @@ export function pointInPoly(x, y, poly) {
 
 // ---------- 逻辑状态 ----------
 // state: { removed:Set(plateIdx), screwHole: int[] (screw -> hole, -1 none) }
-export function initState(L) { return { removed: new Set(), screwHole: L.screws.map(s => s.hole) }; }
+export function initState(L) { return { removed: new Set(), screwHole: L.screws.map(s => s.hole), lifted: new Set() }; }
 export function coverInfo(L) {
   // 每个孔被哪些板覆盖，以及板在该点是否有孔
   if (L._cover) return L._cover;
@@ -85,27 +85,30 @@ export function screwFree(L, st, si) {
   const pinnedTop = Math.max(-1, ...cov.filter(pi => L.plates[pi].holes.includes(hi)).map(pi => L.plates[pi].layer));
   return !cov.some(pi => !L.plates[pi].holes.includes(hi) && L.plates[pi].layer > pinnedTop);
 }
-export function plateScrews(L, st, pi) { return st.screwHole.map((h, si) => L.plates[pi].holes.includes(h) ? si : -1).filter(i => i >= 0); }
+export function plateScrews(L, st, pi) { return st.screwHole.map((h, si) => L.plates[pi].holes.includes(h) && !(st.lifted && st.lifted.has(si)) ? si : -1).filter(i => i >= 0); }
 // 固定某块板的螺丝：自己孔里的螺丝 + （阻挡判定）任何位置落在该板轮廓内的螺丝（螺丝贯穿该点所有重叠板直到底板）
 export function platePins(L, st, pi) {
   if (!BLOCK) return plateScrews(L, st, pi);
   const cov = coverInfo(L);
-  return st.screwHole.map((h, si) => h >= 0 && cov[h].includes(pi) ? si : -1).filter(i => i >= 0);
+  return st.screwHole.map((h, si) => h >= 0 && !(st.lifted && st.lifted.has(si)) && cov[h].includes(pi) ? si : -1).filter(i => i >= 0);
 }
 // 执行移动，返回掉落板列表。每次螺丝移动后重新评估所有板（不动点迭代）：
 // 目标孔里的螺丝会立即挡住覆盖该点的板；拔出的螺丝会释放所有被它贯穿的板
-export function applyMove(L, st, si, hi) {
-  st.screwHole[si] = hi;
-  const fell = [];
-  let changed = true;
-  while (changed) {
-    changed = false;
-    L.plates.forEach((p, pi) => {
-      if (st.removed.has(pi)) return;
-      if (platePins(L, st, pi).length === 0) { st.removed.add(pi); fell.push(pi); changed = true; }
-    });
-  }
+// v1.2.1（对齐参考 3.97s 点击→4.17s 板开始下落）：螺丝一旦拧出（离开孔）就不再固定任何板，
+// 先在“螺丝不在任何孔”的状态下结算掉落，再把螺丝放入目标孔
+export function settle(L, st) {
+  const fell = []; let changed = true;
+  while (changed) { changed = false; L.plates.forEach((p, pi) => { if (!st.removed.has(pi) && platePins(L, st, pi).length === 0) { st.removed.add(pi); fell.push(pi); changed = true; } }); }
   return fell;
+}
+export function liftOut(L, st, si) { (st.lifted || (st.lifted = new Set())).add(si); return settle(L, st); }
+export function cancelLift(st, si) { if (st.lifted) st.lifted.delete(si); }
+export function applyMove(L, st, si, hi) {
+  if (st.lifted) st.lifted.delete(si);
+  st.screwHole[si] = -1;
+  const fell = settle(L, st);
+  st.screwHole[si] = hi;
+  return fell.concat(settle(L, st));
 }
 export function usableHoles(L, st) { return L.holes.map((_, i) => i).filter(i => holeUsable(L, st, i)); }
 export function done(L, st) { return st.removed.size === L.plates.length; }
