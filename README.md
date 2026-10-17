@@ -134,14 +134,14 @@
 ### 动画时长
 | 键 | 说明 | 默认 |
 |---|---|---|
-| `liftDur` | 拧出/抬起时长(ms) | 140 |
+| `liftDur` | 拧出/抬起时长(ms) | 120 |
 | `unscrewTurns` | 拧出旋转圈数(逆时针) | 1 |
 | `liftH` | 抬起高度(px) | 22 |
 | `liftScale` | 抬起放大 | 1.15 |
-| `hoverBob` | 悬停浮动幅度(px) | 2 |
-| `flyDur` | 飞行时长(ms) | 230 |
+| `hoverBob` | 悬停浮动幅度(px) | 0（参考悬停静止） |
+| `flyDur` | 飞行时长(ms) | 133 |
 | `arcBend` | 飞行弧度(px) | 40 |
-| `screwInDur` | 拧入时长(ms) | 130 |
+| `screwInDur` | 拧入时长(ms) | 100 |
 | `screwInTurns` | 拧入旋转圈数(顺时针) | 1 |
 | `settle` | 拧入回弹幅度 | 0.06 |
 | `releaseAt` | 板块释放时机 | seat（落座后）/ lift |

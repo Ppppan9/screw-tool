@@ -43,6 +43,11 @@ const res = {
   swingAngles: L.filter(e => swing22 && e[0] >= swing22[0] && e[0] < swing22[0] + 300).filter((_, i) => i % 2 === 0).map(e => [e[0] - swing22[0], e[4]]),
   finalAngle: L[L.length - 1][4], pivotDrift: Math.max(...L.map(e => Math.hypot(e[5][0] - 426, e[5][1] - 754))), rightHole: L[L.length - 1][6],
 };
+const firstAfter = (t0, f) => { const e = L.find(e => e[0] >= t0 && f(e[7])); return e ? e[0] : null; };
+const tm = (k) => { const tTap1 = taps[k * 2], tTap2 = taps[k * 2 + 1], hov = firstAfter(tTap1, x => x.includes('hover')), inn = firstAfter(tTap2, x => x.includes('in')), seat = k ? seat2 : seat1; return { liftMs: hov - tTap1, flyMs: inn - tTap2, screwInMs: seat - inn, tap2ToSeatMs: seat - tTap2 }; };
+res.screw = [tm(0), tm(1)];
+// 参考（相对第一手 tap1=3.333s）：板23 开始掉落 +767ms(4.100s)，板22 开始摆动 +2300ms(5.633s)
+res.vsRef = { fall23: [res.fall23At - taps[0], 767], swing22: [res.swingAt - taps[0], 2300] };
 console.log(JSON.stringify(res));
 const ok = res.fall23At && res.fallAfterSeatMs >= 0 && res.fallAfterSeatMs < 150 && res.fallAfterTap1Ms > 600 && !res.movedBeforeRelease
   && res.swingAt && res.swingAfterSeatMs >= 0 && res.finalAngle > 12 && res.finalAngle < 22 && res.pivotDrift < 1.5 && Math.hypot(res.rightHole[0] - 482, res.rightHole[1] - 757) > 8;

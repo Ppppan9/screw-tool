@@ -1,5 +1,5 @@
 // 设置定义：所有可调参数。版本号 + 迁移。
-export const SETTINGS_VERSION = 8;
+export const SETTINGS_VERSION = 9;
 export const STORE_KEY = 'screwTool.settings';
 // [key, 标签, 类型, 默认, min, max, step]  类型: range/color/bool/select/text/file
 export const GROUPS = [
@@ -88,14 +88,14 @@ export const GROUPS = [
     ['holeColor', '孔颜色', 'color', '#2a140d'],
   ]],
   ['动画时长', [
-    ['liftDur', '拧出/抬起时长(ms)', 'range', 140, 30, 800, 10],
+    ['liftDur', '拧出/抬起时长(ms，参考≈100–133)', 'range', 120, 30, 800, 10],
     ['unscrewTurns', '拧出旋转圈数(逆时针)', 'range', 1, 0, 5, 0.25],
     ['liftH', '抬起高度(px)', 'range', 22, 0, 80, 1],
     ['liftScale', '抬起放大', 'range', 1.15, 1, 1.6, 0.01],
-    ['hoverBob', '悬停浮动幅度(px)', 'range', 2, 0, 10, 0.5],
-    ['flyDur', '飞行时长(ms)', 'range', 230, 60, 1200, 10],
+    ['hoverBob', '悬停浮动幅度(px，参考=0 静止)', 'range', 0, 0, 10, 0.5],
+    ['flyDur', '飞行时长(ms，参考≈133)', 'range', 133, 40, 1200, 1],
     ['arcBend', '飞行弧度(px)', 'range', 40, 0, 300, 2],
-    ['screwInDur', '拧入时长(ms)', 'range', 130, 30, 800, 10],
+    ['screwInDur', '拧入时长(ms，参考≈100)', 'range', 100, 30, 800, 10],
     ['screwInTurns', '拧入旋转圈数(顺时针)', 'range', 1, 0, 5, 0.25],
     ['settle', '拧入回弹幅度', 'range', 0.06, 0, 0.3, 0.01],
   ]],
@@ -216,6 +216,8 @@ export function migrate(obj) {
   }
   // v7 -> v8（v1.4 板块物理）：新增“物理”分组（只补默认）；重力旧默认 5200 → 参考实测 3600；fallDelay 由 releaseDelay 取代
   if (v < 8) { if (s.gravity === 5200) delete s.gravity; delete s.fallDelay; v = 8; }
+  // v8 -> v9（v1.4.1 螺丝动画时长对齐参考逐帧实测）：仍等于旧默认值的才替换为新默认
+  if (v < 9) { const OLD = { liftDur: 140, flyDur: 230, screwInDur: 130, hoverBob: 2 }; for (const k in OLD) if (s[k] === OLD[k]) delete s[k]; v = 9; }
   const out = { ...DEFS };
   for (const k in DEFS) if (k in s && typeof s[k] === typeof DEFS[k]) out[k] = s[k];
   return out;

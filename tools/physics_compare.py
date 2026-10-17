@@ -17,5 +17,5 @@ for name,(x0,y0,x1,y1),fr in rows:
             cv2.putText(im,f'{src} +{(f-17)*1000/30:.0f}ms f{f}',(3,13),0,0.4,(0,255,255) if src=='tool' else (255,255,255),1)
             tiles.append(cv2.copyMakeBorder(im,0,2,0,2,0))
         out.append(np.hstack(tiles))
-    hdr=np.zeros((22,out[-1].shape[1],3),np.uint8); cv2.putText(hdr,name+'  (top=reference, bottom=tool v1.4, same ms after first tap)',(5,16),0,0.55,(255,255,255),1); out.insert(len(out)-2,hdr)
+    hdr=np.zeros((22,out[-1].shape[1],3),np.uint8); cv2.putText(hdr,name+'  (top=reference, bottom=tool v1.4.1, same ms after first tap)',(5,16),0,0.55,(255,255,255),1); out.insert(len(out)-2,hdr)
 cv2.imwrite('/workspace/screw-tool/screenshots/physics_ref_vs_tool.jpg',np.vstack(out),[cv2.IMWRITE_JPEG_QUALITY,88])

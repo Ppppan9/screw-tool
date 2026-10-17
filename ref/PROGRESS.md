@@ -53,3 +53,4 @@
 - 录制样本 plates: [t, 0/1 有位姿/2 消失, dx, dy, ang]（绕贴图中心）；AE「板块 N 运动」层逐帧位置+旋转；3D 节点 position(x,z)+quaternion；摆动板孔里的螺丝作为运动段逐帧烘焙。
 - S3 test/physics-test.mjs（npm run test:physics）：按参考节奏点击前两手 → 板23 落座后 80ms 掉落（tap1 后 948ms，之前 dy=0），板22 落座后 62ms 开始摆，0/36/73ms = 1.1/10.3/17°，支点漂移 0；screenshots/physics_ref_vs_tool.jpg（tools/physics_compare.py）；/workspace/screw_physics_sample.mp4。
 - 未对齐：工具飞行+拧入 360ms（参考 ~233ms），所以同一时刻对比工具晚 ~180ms；参考里掉落板看起来略放大（可能是运动模糊），未模拟；参考片段中没有“摆动板再拧走最后一颗”的画面。
+- v1.4.1：螺丝动画时长对齐参考（liftDur 140→120, flyDur 230→133, screwInDur 130→100, hoverBob 2→0；设置 v9 只替换仍为旧默认的值）。test:physics 实测：板23 掉落 tap1 后 +794ms（参考 +767），板22 摆动 +2251ms（参考 +2300）；tap2→落座 257/254ms（参考 167–333）。
