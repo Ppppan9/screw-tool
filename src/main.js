@@ -264,11 +264,11 @@ async function autoSolve() {
       await waitIdle(tok);
       const h0 = L.holes[st.screwHole[si]], h1 = L.holes[hi];
       if (S.moveRule === 'tap2') {
-        await tapWorld(h0.x, h0.y, tok); await wait(S.autoSelectGap, tok);
+        await tapWorld(h0.x, h0.y, tok); await waitIdle(tok); await wait(S.autoSelectGap, tok);
         await tapWorld(h1.x, h1.y, tok);
       } else {
         const save = S.moveRule; S.moveRule = 'tap2';
-        await tapWorld(h0.x, h0.y, tok); await wait(S.liftDur, tok); await tapWorld(h1.x, h1.y, tok); S.moveRule = save;
+        await tapWorld(h0.x, h0.y, tok); await waitIdle(tok); await tapWorld(h1.x, h1.y, tok); S.moveRule = save;
       }
       await wait(rr(S.delayMin, S.delayMax) + (Math.random() < S.thinkChance ? Math.random() * S.thinkMax : 0), tok);
     }
