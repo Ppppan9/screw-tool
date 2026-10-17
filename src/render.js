@@ -1,5 +1,8 @@
 // 绘制：背景（纸纹+薄荷叶线稿）、底板、板块、螺丝
 import { mulberry } from './level.js';
+import { smoothPathCtx } from './geom.js';
+// 平滑轮廓(点密)直接 lineTo；粗多边形用圆角
+export function shapePath(ctx, poly, r, smooth) { if (smooth) { ctx.beginPath(); smoothPathCtx(ctx, poly); } else rrPath(ctx, poly, r); }
 export function rrPath(ctx, poly, r) {
   const n = poly.length; ctx.beginPath();
   for (let i = 0; i < n; i++) {
@@ -71,7 +74,7 @@ export function drawBase(ctx, L, S) {
   const rnd = mulberry(11);
   const shapes = (fill, extra) => {
     ctx.fillStyle = fill; ctx.strokeStyle = fill;
-    L.base.polys.forEach(p => { rrPath(ctx, p, 18); ctx.fill(); if (extra) { ctx.lineWidth = extra; ctx.lineJoin = 'round'; ctx.stroke(); } });
+    L.base.polys.forEach(p => { shapePath(ctx, p, 18, L.base.smooth); ctx.fill(); if (extra) { ctx.lineWidth = extra; ctx.lineJoin = 'round'; ctx.stroke(); } });
     L.base.capsules.forEach(c => { capsulePath(ctx, c.pts, c.w + extra); ctx.stroke(); });
   };
   ctx.save(); ctx.translate(0, 5); shapes('rgba(30,20,20,0.30)', 0); ctx.restore();
@@ -81,7 +84,7 @@ export function drawBase(ctx, L, S) {
   const all = L.base.polys.flat().concat(L.base.capsules.flatMap(c => c.pts)); const bb = bbox(all); bb.x -= 50; bb.y -= 50; bb.w += 100; bb.h += 100;
   grain(ctx, bb, '#5a2c22', S.baseGrain, rnd, -0.5, 4); grain(ctx, bb, '#ffe0d0', S.baseGrain * 0.8, rnd, -0.5, 2);
   ctx.restore();
-  ctx.strokeStyle = S.baseOutline; ctx.lineWidth = S.outlineW; ctx.lineJoin = 'round'; L.base.polys.forEach(p => { rrPath(ctx, p, 18); ctx.stroke(); });
+  ctx.strokeStyle = S.baseOutline; ctx.lineWidth = S.outlineW; ctx.lineJoin = 'round'; L.base.polys.forEach(p => { shapePath(ctx, p, 18, L.base.smooth); ctx.stroke(); });
 }
 export function plateSprite(pl, S, idx, dpr) {
   const bb = bbox(pl.poly), pad = 14 + S.plateThick;
@@ -89,18 +92,18 @@ export function plateSprite(pl, S, idx, dpr) {
   const ctx = c.getContext('2d'); ctx.scale(dpr, dpr); ctx.translate(pad - bb.x, pad - bb.y);
   const r = pl.radius * S.plateRadius, rnd = mulberry(100 + idx);
   // 厚度
-  ctx.save(); ctx.translate(0, S.plateThick); rrPath(ctx, pl.poly, r); ctx.fillStyle = S.plateShade; ctx.fill(); ctx.lineWidth = S.outlineW; ctx.strokeStyle = S.plateOutline; ctx.stroke(); ctx.restore();
+  ctx.save(); ctx.translate(0, S.plateThick); shapePath(ctx, pl.poly, r, pl.smooth); ctx.fillStyle = S.plateShade; ctx.fill(); ctx.lineWidth = S.outlineW; ctx.strokeStyle = S.plateOutline; ctx.stroke(); ctx.restore();
   // 面
-  rrPath(ctx, pl.poly, r);
+  shapePath(ctx, pl.poly, r, pl.smooth);
   const g = ctx.createLinearGradient(bb.x, bb.y, bb.x + bb.w * 0.6, bb.y + bb.h); g.addColorStop(0, shade(S.plateColor, 0.35)); g.addColorStop(0.5, S.plateColor); g.addColorStop(1, shade(S.plateColor, -0.08));
   ctx.fillStyle = g; ctx.fill();
   ctx.save(); ctx.clip();
   grain(ctx, bb, '#ffffff', S.plateGrain, rnd, -0.42, 3);
   grain(ctx, bb, '#6b5f9c', S.plateGrain * 0.45, rnd, -0.42, 2);
   // 内高光边
-  rrPath(ctx, pl.poly, r); ctx.lineWidth = 5; ctx.strokeStyle = 'rgba(255,255,255,0.35)'; ctx.stroke();
+  shapePath(ctx, pl.poly, r, pl.smooth); ctx.lineWidth = 5; ctx.strokeStyle = 'rgba(255,255,255,0.35)'; ctx.stroke();
   ctx.restore();
-  rrPath(ctx, pl.poly, r); ctx.lineWidth = S.outlineW; ctx.strokeStyle = S.plateOutline; ctx.stroke();
+  shapePath(ctx, pl.poly, r, pl.smooth); ctx.lineWidth = S.outlineW; ctx.strokeStyle = S.plateOutline; ctx.stroke();
   return { c, x: bb.x - pad, y: bb.y - pad, w: bb.w + pad * 2, h: bb.h + pad * 2 };
 }
 export function drawHole(ctx, x, y, S) {

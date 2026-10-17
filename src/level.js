@@ -1,4 +1,5 @@
 import TRACE from './ref_trace.json';
+import { smoothPoly } from './geom.js';
 // 关卡数据与逻辑。坐标系 720x1280。参考关卡由 ref/frames/g_004.jpg (t=2.93s) 逐点描绘：crop 偏移 (110,310)
 const OX = 0, OY = 0;
 const P = (pts) => pts.map(([x, y]) => [x + OX, y + OY]);
@@ -31,10 +32,10 @@ function segQuad(a, b, w) {
 
 // v1.1：板块轮廓与手型由 tools/trace_plates.py 从参考帧自动分割得到（ref_trace.json）
 export function referenceLevel() {
-  const plates = [], holes = [], screws = [], base = { polys: [TRACE.base], capsules: [] };
+  const plates = [], holes = [], screws = [], base = { polys: [smoothPoly(TRACE.base, 1.8, 3)], capsules: [], smooth: true };
   TRACE.plates.forEach(tp => {
     const hs = tp.screws.map(([x, y]) => { holes.push({ x, y }); return holes.length - 1; });
-    plates.push({ poly: tp.poly, layer: 0, holes: hs, radius: 3 });
+    plates.push({ poly: smoothPoly(tp.poly, 1.2, 2), smooth: true, layer: 0, holes: hs, radius: 3 });
   });
   for (const [x, y] of EMPTY) holes.push({ x, y });
   for (const [x, y] of HIDDEN) holes.push({ x, y });

@@ -1,5 +1,5 @@
 // 设置定义：所有可调参数。版本号 + 迁移。
-export const SETTINGS_VERSION = 3;
+export const SETTINGS_VERSION = 4;
 export const STORE_KEY = 'screwTool.settings';
 // [key, 标签, 类型, 默认, min, max, step]  类型: range/color/bool/select/text/file
 export const GROUPS = [
@@ -135,6 +135,8 @@ export function migrate(obj) {
   if (v < 2) { const OLD = { leafOpacity: 0.55, leafScale: 0.85, plateColor: '#cdc6f0', plateOutline: '#2f2438', plateThick: 5, plateGrain: 0.35, plateShadow: 0.35, screwSize: 38, screwColor: '#d4cff8' }; for (const k in OLD) if (s[k] === OLD[k]) delete s[k]; v = 2; }
   // v2 -> v3：新增螺丝阻挡判定、调试叠加、AE/3D 导出设置——只补默认值，不改动已有值
   if (v < 3) v = 3;
+  // v3 -> v4：底板/板块平滑矢量轮廓（无新字段）
+  if (v < 4) v = 4;
   const out = { ...DEFS };
   for (const k in DEFS) if (k in s && typeof s[k] === typeof DEFS[k]) out[k] = s[k];
   return out;

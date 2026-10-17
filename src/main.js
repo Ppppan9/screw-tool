@@ -41,7 +41,7 @@ function newGame() {
 }
 function rebuild() {
   cv.width = S.canvasW; cv.height = S.canvasH;
-  const dpr = view().k * S.boardScale;
+  const dpr = view().k * S.boardScale * Math.max(1, Math.min(3, window.devicePixelRatio || 1));
   bgCanvas = document.createElement('canvas'); bgCanvas.width = cv.width; bgCanvas.height = cv.height;
   drawBackground(bgCanvas, S, cv.width, cv.height, view().k, bgImg);
   sprites = L.plates.map((p, i) => plateSprite(p, S, i, Math.max(1, dpr)));
