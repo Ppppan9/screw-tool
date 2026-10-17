@@ -1,0 +1,26 @@
+{
+  "name": "screw-tool",
+  "version": "1.0.0",
+  "description": "打螺丝核玩工具（单文件离线版）",
+  "main": "index.js",
+  "scripts": {
+    "build": "node build.mjs",
+    "test": "node test/run-test.mjs"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Ppppan9/screw-tool.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "bugs": {
+    "url": "https://github.com/Ppppan9/screw-tool/issues"
+  },
+  "homepage": "https://github.com/Ppppan9/screw-tool#readme",
+  "devDependencies": {
+    "esbuild": "^0.28.2",
+    "playwright-core": "^1.64.1"
+  }
+}
