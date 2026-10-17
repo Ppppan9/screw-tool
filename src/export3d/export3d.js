@@ -11,6 +11,7 @@ import { makeZip } from '../ae/zip.js';
 import PY_TEXT from './blender_import.py';
 import README_TEXT from './README_3D.md';
 import { drawHole, drawScrew, rrPath } from '../render.js';
+import { pointInPoly as pip } from '../level.js';
 
 export const PX = 0.001;
 const r5 = x => Math.round(x * 1e5) / 1e5;
@@ -38,13 +39,15 @@ export async function export3D({ S, ae, env, drawTextsTo, drawEndTo }) {
   function quad(name, w, h, ax, ay, mat) { const g = new THREE.PlaneGeometry(w * PX, h * PX); g.rotateX(-Math.PI / 2); g.translate((w / 2 - ax) * PX, 0, (h / 2 - ay) * PX); const m = new THREE.Mesh(g, mat); m.name = name; stats.quads++; return m; }
   // UV 由顶点 XZ 位置决定：(x,z) 米 → 贴图覆盖的设计坐标矩形 [x0,y0,w,h]
   function planarUV(g, x0, y0, w, h, ox = 0, oz = 0) { const p = g.attributes.position, uv = new Float32Array(p.count * 2); for (let i = 0; i < p.count; i++) { const dx = (p.getX(i) + ox) / PX + 360, dy = (p.getZ(i) + oz) / PX + 640; uv[i * 2] = (dx - x0) / w; uv[i * 2 + 1] = 1 - (dy - y0) / h; } g.setAttribute('uv', new THREE.BufferAttribute(uv, 2)); }
-  function extrude(pts, depth) { const sh = new THREE.Shape(pts.map(([x, y]) => new THREE.Vector2(x, y))); const g = new THREE.ExtrudeGeometry(sh, { depth, bevelEnabled: false, curveSegments: 4 }); g.rotateX(Math.PI / 2); return g; } // 顶面 y=0，向下挤出
+  function extrude(pts, depth, holes = []) { const sh = new THREE.Shape(pts.map(([x, y]) => new THREE.Vector2(x, y))); holes.forEach(h => sh.holes.push(new THREE.Path(h.map(([x, y]) => new THREE.Vector2(x, y))))); const g = new THREE.ExtrudeGeometry(sh, { depth, bevelEnabled: false, curveSegments: 4 }); g.rotateX(Math.PI / 2); return g; } // 顶面 y=0，向下挤出
 
   // ---------- 背景 / 底板 / 孔 ----------
   { const bg = quad('background', 720, 1280, 360, 640, basic('mat_background', { map: tex(env.bgCanvas, 'background') })); bg.position.y = -0.02; root.add(bg); }
   const BASE_T = 0.004;
   for (const [bi, poly] of L.base.polys.entries()) {
-    const g = extrude(poly.map(([x, y]) => { const d = P(x, y); return [X(d[0]), Z(d[1])]; }), BASE_T);
+    const tp = (pl) => pl.map(([x, y]) => { const d = P(x, y); return [X(d[0]), Z(d[1])]; });
+    const inn = (L.base.inner || []).filter(h => pip(h[0][0], h[0][1], poly));
+    const g = extrude(tp(poly), BASE_T, inn.map(tp));
     planarUV(g, v.tx, v.ty, 720 * v.b, 1280 * v.b);
     const m = new THREE.Mesh(g, [basic('mat_base', { map: tex(env.baseCanvas, 'hand_base') }), basic('mat_base_side', { color: new THREE.Color(S.baseOutline) })]); m.name = 'base_hand' + (bi ? '_' + bi : ''); root.add(m);
   }

@@ -1,12 +1,12 @@
 // 设置定义：所有可调参数。版本号 + 迁移。
-export const SETTINGS_VERSION = 4;
+export const SETTINGS_VERSION = 5;
 export const STORE_KEY = 'screwTool.settings';
 // [key, 标签, 类型, 默认, min, max, step]  类型: range/color/bool/select/text/file
 export const GROUPS = [
   ['画布与关卡', [
     ['canvasW', '画布宽度(px)', 'range', 720, 360, 1440, 2],
     ['canvasH', '画布高度(px)', 'range', 1280, 640, 2560, 2],
-    ['level', '关卡', 'select', 'reference', [['reference', '参考关卡（手掌）'], ['random', '随机生成（保证可解）']]],
+    ['level', '关卡', 'select', 'reference', [['reference', '参考关卡（手掌）'], ['random', '随机生成（保证可解）'], ['image', '导入透明图形生成']]],
     ['seed', '随机种子', 'range', 1, 1, 9999, 1],
     ['emptyHoles', '初始空孔数(随机关)', 'range', 2, 1, 8, 1],
     ['screwsPerPlate', '每块板螺丝数(随机关,上限)', 'range', 2, 1, 4, 1],
@@ -24,6 +24,34 @@ export const GROUPS = [
     ['screwBlock', '螺丝阻挡探测（板被任意贯穿螺丝挡住）', 'bool', true],
     ['debugPins', '调试：显示螺丝固定哪些板', 'bool', false],
     ['moveRule', '落孔规则', 'select', 'tap2', [['tap2', '两次点击：先点螺丝再点孔（参考视频）'], ['nearest', '单击：最近空孔'], ['vacated', '单击：优先刚空出的孔'], ['random', '单击：随机空孔']]],
+  ]],
+  ['导入透明图形生成关卡', [
+    ['shapeImg', '上传透明PNG/WebP（未上传=内置心形）', 'file', ''],
+    ['shapeThreshold', 'Alpha 阈值', 'range', 0.5, 0.05, 0.95, 0.01],
+    ['shapeMargin', '左右边距(px)', 'range', 40, 0, 200, 1],
+    ['shapeMaxH', '最大高度(px)', 'range', 760, 300, 1100, 2],
+    ['shapeScale', '图形缩放', 'range', 1, 0.3, 1.5, 0.01],
+    ['shapeOffX', '图形偏移X', 'range', 0, -300, 300, 1],
+    ['shapeOffY', '图形偏移Y', 'range', 0, -400, 400, 1],
+    ['partStyle', '切分风格', 'select', 'strip', [['strip', '条状分段（参考手指风格）'], ['voronoi', 'Voronoi 拉长块'], ['grid', '网格']]],
+    ['plateSize', '目标板尺寸(px)', 'range', 110, 50, 260, 2],
+    ['plateCount', '板数(Voronoi，0=按尺寸)', 'range', 0, 0, 60, 1],
+    ['partAngle', '条带方向(度)', 'range', 90, 0, 180, 1],
+    ['partRandom', '随机度', 'range', 0.5, 0, 1, 0.01],
+    ['shapeSeed', '图形关卡种子', 'range', 1, 1, 9999, 1],
+    ['seamW', '缝宽(px)', 'range', 5, 1, 24, 0.5],
+    ['edgeInset', '板距底板边缘(px)', 'range', 7, 0, 30, 0.5],
+    ['minPlateArea', '最小板面积(px²)', 'range', 2200, 300, 20000, 100],
+    ['imgScrewMin', '每板螺丝数 最少', 'range', 1, 1, 3, 1],
+    ['imgScrewMax', '每板螺丝数 最多', 'range', 2, 1, 3, 1],
+    ['screwEdgeMin', '螺丝距板边最小(px)', 'range', 20, 8, 60, 1],
+    ['imgEmpty', '初始空孔数', 'range', 1, 1, 6, 1],
+    ['imgHidden', '隐藏底孔数', 'range', 3, 0, 10, 1],
+    ['imgLayers', '层数', 'range', 1, 1, 3, 1],
+    ['layerOverlap', '上层保留比例', 'range', 0.35, 0.05, 1, 0.01],
+    ['baseFill', '底板填充', 'select', 'color', [['color', '设置中的底板颜色'], ['image', '图片自身像素(纹理)']]],
+    ['plateTint', '板块着色', 'select', 'settings', [['settings', '设置中的板块颜色'], ['image', '按图片颜色混合']]],
+    ['plateTintAmt', '图片颜色混合比例', 'range', 0.35, 0, 1, 0.01],
   ]],
   ['外观', [
     ['bgMode', '背景类型', 'select', 'image', [['image', '参考视频提取背景图（默认）'], ['procedural', '程序化绘制（纯色+纸纹+薄荷叶）']]],
@@ -137,6 +165,8 @@ export function migrate(obj) {
   if (v < 3) v = 3;
   // v3 -> v4：底板/板块平滑矢量轮廓（无新字段）
   if (v < 4) v = 4;
+  // v4 -> v5：新增“导入透明图形生成关卡”参数——只补默认值
+  if (v < 5) v = 5;
   const out = { ...DEFS };
   for (const k in DEFS) if (k in s && typeof s[k] === typeof DEFS[k]) out[k] = s[k];
   return out;

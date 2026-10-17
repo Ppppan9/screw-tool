@@ -15,6 +15,7 @@ export function rrPath(ctx, poly, r) {
   }
   ctx.closePath();
 }
+export const mixHex = (a, b, t) => { const p = (h) => { const n = parseInt(h.slice(1), 16); return [n >> 16, n >> 8 & 255, n & 255]; }; const x = p(a), y = p(b); return '#' + x.map((v, i) => Math.round(v + (y[i] - v) * t).toString(16).padStart(2, '0')).join(''); };
 const hexA = (h, a) => { const n = parseInt(h.slice(1), 16); return `rgba(${n >> 16},${n >> 8 & 255},${n & 255},${a})`; };
 export const shade = (h, f) => { const n = parseInt(h.slice(1), 16); const c = [n >> 16, n >> 8 & 255, n & 255].map(v => Math.max(0, Math.min(255, Math.round(f > 0 ? v + (255 - v) * f : v * (1 + f))))); return `rgb(${c})`; };
 
@@ -69,24 +70,30 @@ const bbox = (poly) => { const xs = poly.map(p => p[0]), ys = poly.map(p => p[1]
 function capsulePath(ctx, pts, w) {
   ctx.lineWidth = w; ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.beginPath(); pts.forEach((p, i) => i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1]));
 }
+export function basePath(ctx, L) {
+  ctx.beginPath();
+  L.base.polys.forEach(p => { if (L.base.smooth) smoothPathCtx(ctx, p); else rrPath(ctx, p, 18); });
+  (L.base.inner || []).forEach(p => smoothPathCtx(ctx, p));
+}
 export function drawBase(ctx, L, S) {
-  // 剪影：先描边（外扩），再填充
-  const rnd = mulberry(11);
-  const shapes = (fill, extra) => {
-    ctx.fillStyle = fill; ctx.strokeStyle = fill;
-    L.base.polys.forEach(p => { shapePath(ctx, p, 18, L.base.smooth); ctx.fill(); if (extra) { ctx.lineWidth = extra; ctx.lineJoin = 'round'; ctx.stroke(); } });
-    L.base.capsules.forEach(c => { capsulePath(ctx, c.pts, c.w + extra); ctx.stroke(); });
-  };
-  ctx.save(); ctx.translate(0, 5); shapes('rgba(30,20,20,0.30)', 0); ctx.restore();
-  shapes(S.baseColor, 0);
-  // 木纹：只画在底板内（source-atop）
+  const rnd = mulberry(11), eo = 'evenodd';
+  const shapes = (fill) => { ctx.fillStyle = fill; ctx.strokeStyle = fill; basePath(ctx, L); ctx.fill(eo); L.base.capsules.forEach(c => { capsulePath(ctx, c.pts, c.w); ctx.stroke(); }); };
+  // 绘制到独立图层，保证 source-atop 只作用在底板上
+  const c2 = document.createElement('canvas'); c2.width = ctx.canvas.width; c2.height = ctx.canvas.height; const g = c2.getContext('2d'); g.setTransform(ctx.getTransform());
+  const o = ctx; ctx = g;
+  ctx.save(); ctx.translate(0, 5); shapes('rgba(30,20,20,0.30)'); ctx.restore();
+  o.save(); o.setTransform(1, 0, 0, 1, 0, 0); o.drawImage(c2, 0, 0); o.restore(); ctx.clearRect(-1e4, -1e4, 2e4, 2e4);
+  shapes(S.baseColor);
   ctx.save(); ctx.globalCompositeOperation = 'source-atop';
+  const T = L.base.tex; if (T) ctx.drawImage(T.img, T.sx, T.sy, T.sw, T.sh, T.dx, T.dy, T.dw, T.dh);
   const all = L.base.polys.flat().concat(L.base.capsules.flatMap(c => c.pts)); const bb = bbox(all); bb.x -= 50; bb.y -= 50; bb.w += 100; bb.h += 100;
   grain(ctx, bb, '#5a2c22', S.baseGrain, rnd, -0.5, 4); grain(ctx, bb, '#ffe0d0', S.baseGrain * 0.8, rnd, -0.5, 2);
   ctx.restore();
-  ctx.strokeStyle = S.baseOutline; ctx.lineWidth = S.outlineW; ctx.lineJoin = 'round'; L.base.polys.forEach(p => { shapePath(ctx, p, 18, L.base.smooth); ctx.stroke(); });
+  ctx.strokeStyle = S.baseOutline; ctx.lineWidth = S.outlineW; ctx.lineJoin = 'round'; basePath(ctx, L); ctx.stroke();
+  o.save(); o.setTransform(1, 0, 0, 1, 0, 0); o.drawImage(c2, 0, 0); o.restore();
 }
-export function plateSprite(pl, S, idx, dpr) {
+export function plateSprite(pl, S0, idx, dpr) {
+  const S = pl.tint ? { ...S0, plateColor: mixHex(S0.plateColor, pl.tint, S0.plateTintAmt ?? 0.35) } : S0;
   const bb = bbox(pl.poly), pad = 14 + S.plateThick;
   const c = document.createElement('canvas'); c.width = Math.ceil((bb.w + pad * 2) * dpr); c.height = Math.ceil((bb.h + pad * 2) * dpr);
   const ctx = c.getContext('2d'); ctx.scale(dpr, dpr); ctx.translate(pad - bb.x, pad - bb.y);

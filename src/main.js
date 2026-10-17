@@ -1,3 +1,4 @@
+import { levelFromImage, defaultShapeCanvas } from './shapegen.js';
 import { referenceLevel, generateLevel, initState, holeUsable, screwFree, applyMove, pickHole, solve, done, setBlocking, platePins, coverInfo } from './level.js';
 import { GROUPS, DEFS, loadSettings, saveSettings, migrate, exportJSON } from './settings.js';
 import { drawBackground, drawBase, plateSprite, drawHole, drawScrew } from './render.js';
@@ -29,10 +30,17 @@ function toWorld(px, py) { const v = view(); const x = px / v.k, y = (py - v.oy)
 function worldToDesign(x, y) { const v = view(); return { x: x * v.b + v.tx, y: y * v.b + v.ty }; }
 
 // ---------- 关卡 ----------
+// v1.3 图形关卡：图片缓存（异步加载完成后重新开局）
+const shapeCache = { src: null, img: null };
+function imageLevel() {
+  if (!S.shapeImg) return levelFromImage(defaultShapeCanvas(), S, S.shapeSeed);
+  if (shapeCache.src !== S.shapeImg) { shapeCache.src = S.shapeImg; shapeCache.img = null; const im = new Image(); im.onload = () => { if (shapeCache.src === im.src || shapeCache.src === S.shapeImg) { shapeCache.img = im; newGame(); } }; im.src = S.shapeImg; }
+  return shapeCache.img ? levelFromImage(shapeCache.img, S, S.shapeSeed) : levelFromImage(defaultShapeCanvas(), S, S.shapeSeed);
+}
 function newGame() {
   setBlocking(S.screwBlock);
   autoToken++; autoRunning = false; updAutoBtn();
-  L = S.level === 'random' ? generateLevel(S, S.seed) : referenceLevel();
+  L = S.level === 'random' ? generateLevel(S, S.seed) : S.level === 'image' ? imageLevel() : referenceLevel();
   st = initState(L); active = null; lastVacated = -1; finishedAt = 0; endShownAt = 0;
   plateVis = L.plates.map(() => ({ s: 'on', y: 0, vy: 0, rot: 0, t0: 0 }));
   screwVis = L.screws.map((s, i) => ({ ang: (i * 1.7) % (Math.PI / 2) - 0.3, lift: 0, sc: 1, x: 0, y: 0, anim: null }));
@@ -329,8 +337,9 @@ function loop(t) {
 }
 
 // ---------- 设置面板 ----------
-const REBUILD_KEYS = /^(canvas|bg|leaf|base|plate|outline|board)/, NEWGAME_KEYS = /^(level|seed|emptyHoles|screwsPerPlate|gen|screwBlock)/;
+const REBUILD_KEYS = /^(canvas|bg|leaf|base|plate|outline|board)/, NEWGAME_KEYS = /^(level|seed|emptyHoles|screwsPerPlate|gen|screwBlock|shape|part|seamW|edgeInset|minPlateArea|img|screwEdgeMin|layerOverlap|plateSize|plateCount|plateTint|baseFill)/;
 function applyChange(k) {
+  if (k === 'shapeImg' && S.shapeImg) S.level = 'image';
   saveSettings(S);
   if (NEWGAME_KEYS.test(k)) newGame(); else if (REBUILD_KEYS.test(k)) rebuild();
   if (k === 'handImg') loadHand();
@@ -368,6 +377,7 @@ function buildPanel() {
 function toast(t) { const el = document.getElementById('toast'); el.textContent = t; el.classList.add('show'); setTimeout(() => el.classList.remove('show'), 1600); }
 document.getElementById('btnAuto').onclick = autoSolve;
 document.getElementById('btnNew').onclick = newGame;
+document.getElementById('btnShape').onclick = () => { S.shapeSeed = 1 + Math.floor(Math.random() * 9999); S.level = 'image'; saveSettings(S); buildPanel(); newGame(); };
 document.getElementById('btnSeed').onclick = () => { S.seed = 1 + Math.floor(Math.random() * 9999); if (S.level !== 'random') S.level = 'random'; saveSettings(S); buildPanel(); newGame(); };
 document.getElementById('btnRec').onclick = () => rec ? stopRec() : startRec();
 document.getElementById('btnShot').onclick = () => { const a = document.createElement('a'); a.href = cv.toDataURL('image/png'); a.download = 'screw_shot.png'; a.click(); };
