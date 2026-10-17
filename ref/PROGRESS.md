@@ -46,3 +46,10 @@
 - AE：aeNames 中/英命名后处理、aeSize 整体缩放 K（meta.scale）、meta.saveAep 跟随设置、主合成每个音效事件一个标记、混合音轨默认开启（与麻将一致）；图层名 结束页/手指/免责声明。3D：复用 AE 记录（export3dFps、bake、en、canvas、both），十字槽尺寸跟随 crossLen/crossW。
 - 规范文档 ref/TOOLKIT_STANDARD.md。
 - 剩余：handRotation/handFlip/manualHand/handAvoid、recRes 未移植（打螺丝用 canvasW/H）；逐事件音效无 audioDb（音效 hook 无音量）。
+
+## v1.4（完成）板块物理反馈对齐参考
+- S1 参考逐帧重分析（ANALYSIS.md「物理反馈」，screenshots/ref_physics_frames.jpg；tools/track_plate_rot.py 模板配准测角）：悬停/飞行期间板不动；螺丝在目标孔落座后 33–67ms 才释放；双钉板拧走一颗 → 绕剩余钉 ~100ms 内下垂到 16.75° 硬停；最后一颗 → 3600 px/s² 下落，偏心钉带来 ~75°/s 旋转。v1.2.1 “拧出 200ms 掉落”是把第二次点击当成第一次点击的误判。
+- S2 src/physics.js：多边形质量属性（质心、k2=I/m）；钉=铰接；≥2 钉固定；由多钉减到 1 钉 → 物理摆（boost·g·rx/(k2+r²)，阻尼、最大角限位+回弹、初始角速度）；0 钉 → 重力自由落体 + 保留角速度 + 偏心力矩初始旋转。main.js：vHole 视觉固定（落座+releaseDelay 才更新）、holeWorld（摆动板上的孔/螺丝随板变换，点击判定、自动通关点击位置、飞行目标都用世界坐标）。逻辑/求解器不变。设置 v8：分组「物理」(releaseAt seat|lift, releaseDelay, gravity 3600, swingBoost, swingMax, swingDamp, swingBounce, swingKick, releaseSpinK, fallSpin, fallFade)，迁移：gravity 旧默认 5200→3600，删除 fallDelay。
+- 录制样本 plates: [t, 0/1 有位姿/2 消失, dx, dy, ang]（绕贴图中心）；AE「板块 N 运动」层逐帧位置+旋转；3D 节点 position(x,z)+quaternion；摆动板孔里的螺丝作为运动段逐帧烘焙。
+- S3 test/physics-test.mjs（npm run test:physics）：按参考节奏点击前两手 → 板23 落座后 80ms 掉落（tap1 后 948ms，之前 dy=0），板22 落座后 62ms 开始摆，0/36/73ms = 1.1/10.3/17°，支点漂移 0；screenshots/physics_ref_vs_tool.jpg（tools/physics_compare.py）；/workspace/screw_physics_sample.mp4。
+- 未对齐：工具飞行+拧入 360ms（参考 ~233ms），所以同一时刻对比工具晚 ~180ms；参考里掉落板看起来略放大（可能是运动模糊），未模拟；参考片段中没有“摆动板再拧走最后一颗”的画面。

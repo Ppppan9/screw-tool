@@ -4,7 +4,7 @@ import { chromium } from 'playwright-core'; import fs from 'fs';
 const b = await chromium.launch({ executablePath: '/usr/bin/google-chrome', headless: true });
 const p = await b.newPage({ viewport: { width: 1400, height: 1000 } });
 await p.goto('file://' + process.cwd() + '/index.html'); await p.waitForTimeout(500);
-const r = await p.evaluate(() => new Promise(res => {
+const r = await p.evaluate((REC) => new Promise(res => {
   const G = __game, L = G.L, H = (x, y) => L.holes.findIndex(h => Math.hypot(h.x - x, h.y - y) < 4);
   const h23 = H(452, 806), hEmpty = H(400, 668), h22r = H(482, 757), h22l = H(426, 754);
   const pl = (x, y) => L.plates.findIndex(q => q.holes.includes(H(x, y)));
@@ -21,15 +21,17 @@ const r = await p.evaluate(() => new Promise(res => {
     const sv = G.screwVis.map(v => v.anim ? v.anim.k : '').join(',');
     log.push([Math.round(t), b23.s, +b23.dy.toFixed(1), b22.s, +(b22.ang * 180 / Math.PI).toFixed(2), G.holeWorld(h22l).map(v => +v.toFixed(2)), G.holeWorld(h22r).map(v => +v.toFixed(1)), sv.replace(/,+/g, ',')]);
     while (sh < shots.length && t >= shots[sh].t) { out.shots.push({ f: shots[sh].f, t: Math.round(t), url: stage.toDataURL('image/jpeg', 0.9) }); sh++; }
+    if (REC && t > F(10)) (out.all = out.all || []).push([Math.round(t), stage.toDataURL('image/jpeg', 0.85)]);
     if (t > F(110)) { out.log = log; out.view = G.view(); out.P = { P23, P22, h22l, h22r }; return res(out); }
     requestAnimationFrame(tick);
   };
   requestAnimationFrame(tick);
-}));
+}), !!process.env.REC);
 await b.close();
 fs.mkdirSync('/tmp/physfr', { recursive: true });
 r.shots.forEach(s => fs.writeFileSync(`/tmp/physfr/f${s.f}.jpg`, Buffer.from(s.url.split(',')[1], 'base64')));
 fs.writeFileSync('/tmp/physfr/view.json', JSON.stringify(r.view));
+if (r.all) { fs.mkdirSync('/tmp/physfr/all', { recursive: true }); r.all.forEach(([t, u], i) => fs.writeFileSync(`/tmp/physfr/all/${String(i).padStart(4, '0')}_${t}.jpg`, Buffer.from(u.split(',')[1], 'base64'))); }
 const L = r.log.filter(e => typeof e[0] === 'number'), taps = r.log.filter(e => e[0] === 'tap').map(e => e[2]);
 const seatT = (after) => { let w = false; for (const e of L) { if (e[0] < after) continue; if (e[7].includes('in')) w = true; else if (w) return e[0]; } return null; };
 const fall23 = L.find(e => e[1] === 'fall'), swing22 = L.find(e => e[3] === 'swing');

@@ -9,7 +9,7 @@ const r = await p.evaluate(() => new Promise(res => {
   const tick = () => {
     const t = performance.now() - t0;
     G.screwVis.forEach((v, si) => { if (v.anim && v.anim.k === 'lift' && tLift === null) { tLift = t; liftSi = si; } });
-    if (tLift !== null && tFall === null && G.plateVis.some(q => q.s === 'falling')) tFall = t;
+    if (tLift !== null && tFall === null && G.plateVis.some(q => q.s === 'fall')) tFall = t;
     if (tLift !== null && G.screwVis[liftSi] && !G.screwVis[liftSi].anim && tFall === null) { tLift = null; liftSi = -1; }
     if (tLift !== null) fr.push([t - tLift, stage.toDataURL('image/jpeg', 0.8), G.plateVis.map(q => q.s).join('')]);
     if (tFall !== null && t - tFall > 350) return res({ tLift, tFall, fr });
