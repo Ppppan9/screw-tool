@@ -39,3 +39,10 @@
 - render.js：板块光泽白边(plateGloss)+右下淡暗边、斜向铅笔排线（临时层整体模糊）、描边外浅色光晕(edgeHalo)、薄厚度边；螺丝拉丝锥形渐变(screwBrush)、细暗边(screwRim/screwRimW)、去内圈、细十字(crossLen/crossW)；孔：深红棕+奶白斜面月牙；底板：弱暗纹+强亮纹、内侧白亮边(baseGloss)。geom.offsetPoly：参考关卡底板内缩 3px（手指不再露粉边）。
 - 设置 v6：旧默认值→新默认（迁移只替换仍为旧默认的值），新增键只补默认。vorDensity=2.6（Voronoi 自动板数倍率，star_hole 19 板）。
 - 截图：screenshots/material_compare_before.jpg / material_compare.jpg / compare_ref_vs_tool.jpg。
+
+## v1.3.1（随 v1.3 一起提交）导出格式与通用参数对齐麻将工具
+- settings v7：autoStepMin/Max→delayMin/Max，autoMoveDur→moveMin/Max(±15%)，autoJitter→jitter，handImg→handImage，handScale→handSize(画面宽比例, ×0.42)，handPress→pressDepth(1-x)，tapFx→pressEnabled，sfx→sfxMute(取反)，sfxVol→sfxVolume，recTail(ms)→tailSec(s)，endText→endTitle；新增 thinkChance/thinkMax、autoStop、aeWithRec、aeSize、aeNames、aeSaveAep、endCardHand。分组/标签/顺序同麻将（音效 → 手指 / 自动通关 → 录制 → 导出 AE 工程 → 导出 3D 动画 → 结束页）。
+- 面板按钮：AE「● 开始记录/■ 停止并导出」「⬇ 导出 ZIP」、3D「导出 3D 动画 (glTF/FBX/Blender)」移入对应分组（顶部按钮与麻将一致）。打螺丝保留“开局即记录”。
+- AE：aeNames 中/英命名后处理、aeSize 整体缩放 K（meta.scale）、meta.saveAep 跟随设置、主合成每个音效事件一个标记、混合音轨默认开启（与麻将一致）；图层名 结束页/手指/免责声明。3D：复用 AE 记录（export3dFps、bake、en、canvas、both），十字槽尺寸跟随 crossLen/crossW。
+- 规范文档 ref/TOOLKIT_STANDARD.md。
+- 剩余：handRotation/handFlip/manualHand/handAvoid、recRes 未移植（打螺丝用 canvasW/H）；逐事件音效无 audioDb（音效 hook 无音量）。

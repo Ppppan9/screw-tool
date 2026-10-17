@@ -340,7 +340,7 @@ let lastT = now();
 function loop(t) {
   const dt = Math.min(0.05, (t - lastT) / 1000); lastT = t;
   step(t, dt); updPress(t); draw(t);
-  if (aeRec.rec && !recClosed) { if (recTailDone(t)) { recClosed = true; updateAEButtons(); } else aeRec.sample(t); if ((t | 0) % 10 === 0) updateAEButtons(); }
+  if (aeRec.rec && !recClosed) { if (recTailDone(t)) { recClosed = true; updateAEButtons(); } else aeRec.sample(t); if (t - (loop.aeBtnT || 0) > 250) { loop.aeBtnT = t; updateAEButtons(); } }
   if (rec) document.getElementById('recInfo').textContent = `录制中 ${((t - recT0) / 1000).toFixed(1)}s`; else document.getElementById('recInfo').textContent = '';
   requestAnimationFrame(loop);
 }

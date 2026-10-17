@@ -166,7 +166,7 @@ export function drawScrew(ctx, x, y, S, ang, lift, sc, part = 'all') {
     const g = ctx.createRadialGradient(x - R * 0.35, y - R * 0.35, R * 0.1, x, y, R); g.addColorStop(0, shade(S.screwColor, 0.55)); g.addColorStop(0.6, S.screwColor); g.addColorStop(1, S.screwDark);
     ctx.fillStyle = g; ctx.fill();
     if (S.screwBrush > 0 && ctx.createConicGradient) {
-      const cg = ctx.createConicGradient(ang + 0.6, x, y), K = 4;
+      const cg = ctx.createConicGradient(0.6, x, y), K = 4; // 反光方向固定（不随螺丝旋转），AE 螺帽素材因此可静态
       for (let i = 0; i <= K * 2; i++) { const lt = i % 2 === 0; cg.addColorStop(Math.min(1, (i + (lt ? 0 : 0.2)) / (K * 2)), lt ? `rgba(255,255,255,${0.9 * S.screwBrush})` : `rgba(50,42,90,${0.7 * S.screwBrush})`); }
       ctx.save(); ctx.globalAlpha = 1; ctx.fillStyle = cg; ctx.beginPath(); ctx.arc(x, y, R * 0.97, 0, 7); ctx.fill(); ctx.restore();
     }

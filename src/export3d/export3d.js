@@ -91,7 +91,7 @@ export async function export3D({ S, ae, env, drawTextsTo, drawEndTo }) {
   const headMat = basic('mat_screw_head', { map: tex(headC, 'screw_head'), transparent: true }), crossMat = basic('mat_screw_cross', { color: new THREE.Color(S.screwCross) }), crossTexMat = basic('mat_screw_cross_tex', { map: tex(crossC, 'screw_cross'), transparent: true, depthWrite: false });
   const sideMat = basic('mat_screw_side', { color: new THREE.Color(S.screwDark) }), shankMat = basic('mat_screw_shank', { color: new THREE.Color(S.screwColor) });
   const headGeo = (() => { const g = new THREE.CylinderGeometry(Rb * PX, Rb * PX, 0.003, 32); g.translate(0, 0.0015, 0); planarUV(g, -HW, -HW, HW * 2, HW * 2, 0, 0); const p = g.attributes.position, uv = g.attributes.uv; for (let i = 0; i < p.count; i++) uv.setXY(i, (p.getX(i) / PX + HW) / (HW * 2), 1 - (p.getZ(i) / PX + HW) / (HW * 2)); return g; })();
-  const slotL = Rb * 0.62 * 2 * PX, slotT = Rb * 0.17 * 2 * PX;
+  const slotL = Rb * (S.crossLen ?? 0.62) * 2 * PX, slotT = Rb * (S.crossW ?? 0.34) * 0.85 * PX; // 与 2D 十字槽同参数（M-C）
   const shankGeo = new THREE.CylinderGeometry(Rb * 0.42 * PX, Rb * 0.42 * PX, 1, 12).translate(0, 0.5, 0);
   const screws = new THREE.Group(); screws.name = 'screws'; root.add(screws);
   rec.screws.forEach((s, si) => {
