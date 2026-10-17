@@ -6,7 +6,9 @@
   "scripts": {
     "build": "node build.mjs",
     "test": "node test/run-test.mjs",
-    "test:logic": "esbuild test/logic-test.mjs --bundle --platform=node --format=esm --loader:.jpg=dataurl --log-level=warning --outfile=/tmp/screw-logic.mjs && node /tmp/screw-logic.mjs"
+    "test:logic": "esbuild test/logic-test.mjs --bundle --platform=node --format=esm --loader:.jpg=dataurl --log-level=warning --outfile=/tmp/screw-logic.mjs && node /tmp/screw-logic.mjs",
+    "test:ae": "node test/ae-export.mjs && node test/ae-mock.mjs /workspace/screw_ae_sample.zip && node test/ae-composite.mjs",
+    "test:3d": "E3D=1 node test/ae-export.mjs && bash test/export3d-blender.sh"
   },
   "repository": {
     "type": "git",

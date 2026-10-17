@@ -3,11 +3,13 @@ import { GROUPS, DEFS, loadSettings, saveSettings, migrate, exportJSON } from '.
 import { drawBackground, drawBase, plateSprite, drawHole, drawScrew } from './render.js';
 import { Sfx } from './audio.js';
 import BG_REF from './bg_ref.jpg';
+import { createAERecorder } from './ae/recorder.js';
+import { export3D } from './export3d/export3d.js';
 const bgImg = new Image(); bgImg.src = BG_REF; bgImg.onload = () => { if (L) rebuild(); };
 
 let S = loadSettings();
 setBlocking(S.screwBlock);
-const cv = document.getElementById('stage'), ctx = cv.getContext('2d');
+const cv = document.getElementById('stage'); let ctx = cv.getContext('2d');
 const sfx = new Sfx();
 let L, st, plateVis, screwVis, sprites, bgCanvas, baseCanvas, active = null, lastVacated = -1, autoRunning = false, autoToken = 0, endShownAt = 0, finishedAt = 0;
 const hand = { x: 820, y: 1450, press: 0, img: null, visible: false };
@@ -34,7 +36,7 @@ function newGame() {
   st = initState(L); active = null; lastVacated = -1; finishedAt = 0; endShownAt = 0;
   plateVis = L.plates.map(() => ({ s: 'on', y: 0, vy: 0, rot: 0, t0: 0 }));
   screwVis = L.screws.map((s, i) => ({ ang: (i * 1.7) % (Math.PI / 2) - 0.3, lift: 0, sc: 1, x: 0, y: 0, anim: null }));
-  rebuild();
+  rebuild(); recStart();
   status(`板 ${L.plates.length} 块，螺丝 ${L.screws.length} 颗，孔 ${L.holes.length} 个`);
 }
 function rebuild() {
@@ -104,6 +106,8 @@ function step(t, dt) {
 const busy = () => screwVis.some(v => v.anim && v.anim.k !== 'hover');
 
 // ---------- 绘制 ----------
+const visOnG = (pi) => plateVis[pi].s === 'on' || plateVis[pi].s === 'wait';
+function screwLayer(si) { const h = st.screwHole[si]; let lay = -1; L.plates.forEach((p, pi) => { if (visOnG(pi) && p.holes.includes(h)) lay = Math.max(lay, p.layer); }); return lay; }
 function draw(t) {
   const v = view();
   ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.drawImage(bgCanvas, 0, 0);
@@ -111,7 +115,6 @@ function draw(t) {
   ctx.drawImage(baseCanvas, 0, 0, 720, 1280);
   L.holes.forEach(h => drawHole(ctx, h.x, h.y, S));
   const visOn = (pi) => plateVis[pi].s === 'on' || plateVis[pi].s === 'wait';
-  const screwLayer = (si) => { const h = st.screwHole[si]; let lay = -1; L.plates.forEach((p, pi) => { if (visOn(pi) && p.holes.includes(h)) lay = Math.max(lay, p.layer); }); return lay; };
   const moving = [];
   const drawS = (si) => { const sv = screwVis[si]; if (sv.anim) { moving.push(si); return; } const [x, y] = screwPos(si); drawScrew(ctx, x, y, S, sv.ang, 0, sv.sc); };
   // 飞行中的螺丝：其原板上的位置（逻辑已移走）在旧板上应显示为孔
@@ -163,13 +166,16 @@ function drawTexts() {
   }
   ctx.restore();
 }
-function drawEnd(t) {
-  const p = Math.min(1, (t - finishedAt - S.endDelay) / 400);
+function endAlpha(t) { return finishedAt && S.endCard && t - finishedAt > S.endDelay ? Math.min(1, (t - finishedAt - S.endDelay) / 400) : 0; }
+function withCtx(g, fn) { const save = ctx; ctx = g; try { fn(); } finally { ctx = save; } }
+function drawEnd(t, pv) {
+  const p = pv != null ? pv : endAlpha(t);
   ctx.save(); ctx.globalAlpha = p; ctx.fillStyle = 'rgba(0,0,0,.55)'; ctx.fillRect(0, -200, 720, 1700);
   ctx.fillStyle = '#ffd54a'; ctx.beginPath(); ctx.roundRect(160, 600, 400, 100, 50); ctx.fill();
   ctx.fillStyle = '#4a2a00'; ctx.font = 'bold 34px "Microsoft YaHei",sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(S.endText, 360, 650);
   ctx.restore();
 }
+function handState() { if (!S.handShow || !hand.img || !hand.visible) return null; return { x: hand.x, y: hand.y, s: S.handScale * (1 - (1 - S.handPress) * hand.press) }; }
 function drawHand() {
   if (!S.handShow || !hand.img || !hand.visible) return;
   const im = hand.img, sc = S.handScale * (1 - (1 - S.handPress) * hand.press), w = im.width * sc, h = im.height * sc;
@@ -236,7 +242,7 @@ async function autoSolve() {
   if (active !== null) { dropBack(active); active = null; }
   const plan = solve(L, st); if (!plan) { status('当前局面无解，请重新开始'); return; }
   const tok = ++autoToken; autoRunning = true; updAutoBtn(); sfx.resume();
-  hand.x = 820; hand.y = 1450; hand.visible = true;
+  hand.x = 820; hand.y = 1450; hand.visible = true; recStart();
   if (S.autoRec && !rec) startRec();
   sfx.playBgm();
   try {
@@ -290,11 +296,34 @@ function startRec() {
 function stopRec() { if (rec && rec.state !== 'inactive') rec.stop(); }
 function updRecBtn() { const b = document.getElementById('btnRec'); b.textContent = rec ? '■ 停止录制' : '⏺ 开始录制'; b.classList.toggle('on', !!rec); }
 
+// ---------- AE / 3D 导出 ----------
+const aeRec = createAERecorder({
+  sfx, screwLayer, handState, endAlpha, coverInfo,
+  env: () => ({ L, st, S, plateVis, screwVis, view, sprites, bgCanvas, baseCanvas, canvas: cv, handImg: hand.img }),
+  drawTextsTo: (g) => withCtx(g, drawTexts), drawEndTo: (g, p) => withCtx(g, () => drawEnd(0, p)),
+});
+let recClosed = false;
+function recStart() { aeRec.start(); recClosed = false; }
+function recTailDone(t) { return finishedAt && t - finishedAt > (S.endCard ? S.endDelay + 400 : 0) + Math.max(800, S.recTail); }
+function download(blob, name) { const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; a.textContent = `⬇ ${name} (${(blob.size / 1e6).toFixed(1)}MB)`; document.getElementById('recList').prepend(a); a.click(); }
+async function doExportAE(save = true) {
+  status('正在生成 AE 工程…'); const r = await aeRec.exportZip(); window.__aeLast = r;
+  if (save) download(r.blob, r.name); status(`AE 工程：${r.stats.layers} 图层，${r.stats.keys} 关键帧`); return r;
+}
+async function doExport3D(save = true) {
+  status('正在生成 3D 动画…'); const ae = await aeRec.exportZip();
+  const r = await export3D({ S, ae, env: { L, view: view(), sprites, bgCanvas, baseCanvas, handImg: hand.img, rec: aeRec.rec }, drawTextsTo: (g) => withCtx(g, drawTexts), drawEndTo: (g, p) => withCtx(g, () => drawEnd(0, p)) });
+  window.__e3dLast = r; if (save) download(r.blob, r.name); status(`3D 动画：${r.stats.plates} 板，${r.stats.screws} 螺丝，${r.duration.toFixed(2)}s`); return r;
+}
+document.getElementById('btnAE').onclick = () => doExportAE().catch(e => { status('导出失败：' + e.message); console.error(e); });
+document.getElementById('btn3D').onclick = () => doExport3D().catch(e => { status('导出失败：' + e.message); console.error(e); });
+
 // ---------- 主循环 ----------
 let lastT = now();
 function loop(t) {
   const dt = Math.min(0.05, (t - lastT) / 1000); lastT = t;
   step(t, dt); updPress(t); draw(t);
+  if (aeRec.rec && !recClosed) { if (recTailDone(t)) recClosed = true; else aeRec.sample(t); }
   if (rec) document.getElementById('recInfo').textContent = `录制中 ${((t - recT0) / 1000).toFixed(1)}s`; else document.getElementById('recInfo').textContent = '';
   requestAnimationFrame(loop);
 }
@@ -346,6 +375,6 @@ document.getElementById('btnExport').onclick = () => { const a = document.create
 document.getElementById('btnImport').onclick = () => document.getElementById('importFile').click();
 document.getElementById('importFile').onchange = (e) => { const f = e.target.files[0]; if (!f) return; f.text().then(t => { S = migrate(JSON.parse(t)); saveSettings(S); buildPanel(); loadHand(); sfx.setBgm(S.bgm, S.bgmVol); newGame(); toast('已导入设置'); }).catch(() => toast('导入失败')); };
 document.getElementById('btnReset').onclick = () => { if (!confirm('恢复全部默认设置？')) return; S = { ...DEFS }; saveSettings(S); buildPanel(); loadHand(); newGame(); };
-window.__game = { autoSolve, newGame, get S() { return S; }, set(k, v) { S[k] = v; applyChange(k); buildPanel(); }, get st() { return st; }, get L() { return L; }, startRec, stopRec };
+window.__game = { doExportAE, doExport3D, aeRec, autoSolve, newGame, get S() { return S; }, set(k, v) { S[k] = v; applyChange(k); buildPanel(); }, get st() { return st; }, get L() { return L; }, startRec, stopRec };
 buildPanel(); loadHand(); newGame(); if (S.bgm) sfx.setBgm(S.bgm, S.bgmVol);
 requestAnimationFrame(loop);

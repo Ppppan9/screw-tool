@@ -109,26 +109,32 @@ export function drawHole(ctx, x, y, S) {
   ctx.beginPath(); ctx.arc(x, y, r, 0, 7); const g = ctx.createRadialGradient(x, y - r * 0.4, r * 0.1, x, y, r); g.addColorStop(0, S.holeColor); g.addColorStop(1, shade(S.holeColor, 0.15)); ctx.fillStyle = g; ctx.fill();
   ctx.lineWidth = 1.5; ctx.strokeStyle = 'rgba(0,0,0,0.6)'; ctx.stroke();
 }
-export function drawScrew(ctx, x, y, S, ang, lift, sc) {
-  const R = S.screwSize / 2 * sc;
-  if (lift > 0.5) {
+// part: 'all' | 'shadow' | 'shank' | 'head' | 'cross'（AE 导出把螺丝拆成独立图层）
+export function drawScrew(ctx, x, y, S, ang, lift, sc, part = 'all') {
+  const R = S.screwSize / 2 * sc, all = part === 'all';
+  if (lift > 0.5 || !all) {
     // 投影
-    ctx.beginPath(); ctx.ellipse(x + lift * 0.25, y + 2, R * 0.9, R * 0.55, 0, 0, 7); ctx.fillStyle = `rgba(20,10,30,${Math.min(0.35, lift / 60)})`; ctx.fill();
+    if (all || part === 'shadow') { ctx.beginPath(); ctx.ellipse(x + lift * 0.25, y + 2, R * 0.9, R * 0.55, 0, 0, 7); ctx.fillStyle = all ? `rgba(20,10,30,${Math.min(0.35, lift / 60)})` : 'rgb(20,10,30)'; ctx.fill(); }
     // 螺杆（带螺纹）
-    const w = R * 0.42, top = y - lift;
-    ctx.fillStyle = S.screwDark; ctx.fillRect(x - w, top, w * 2, lift);
-    const g = ctx.createLinearGradient(x - w, 0, x + w, 0); g.addColorStop(0, shade(S.screwColor, -0.35)); g.addColorStop(0.4, shade(S.screwColor, 0.4)); g.addColorStop(1, shade(S.screwColor, -0.5));
-    ctx.fillStyle = g; ctx.fillRect(x - w, top, w * 2, lift);
-    ctx.strokeStyle = 'rgba(40,30,60,0.55)'; ctx.lineWidth = 1.2;
-    const ph = ((ang / (Math.PI * 2)) % 1 + 1) % 1 * 6;
-    for (let yy = top + ph; yy < y; yy += 6) { ctx.beginPath(); ctx.moveTo(x - w, yy); ctx.lineTo(x + w, yy - 3); ctx.stroke(); }
-    ctx.strokeStyle = S.plateOutline; ctx.lineWidth = 1.2; ctx.strokeRect(x - w, top, w * 2, lift);
-    y = top;
+    if (all || part === 'shank') {
+      const w = R * 0.42, top = y - lift;
+      ctx.fillStyle = S.screwDark; ctx.fillRect(x - w, top, w * 2, lift);
+      const g = ctx.createLinearGradient(x - w, 0, x + w, 0); g.addColorStop(0, shade(S.screwColor, -0.35)); g.addColorStop(0.4, shade(S.screwColor, 0.4)); g.addColorStop(1, shade(S.screwColor, -0.5));
+      ctx.fillStyle = g; ctx.fillRect(x - w, top, w * 2, lift);
+      ctx.strokeStyle = 'rgba(40,30,60,0.55)'; ctx.lineWidth = 1.2;
+      const ph = ((ang / (Math.PI * 2)) % 1 + 1) % 1 * 6;
+      for (let yy = top + ph; yy < y; yy += 6) { ctx.beginPath(); ctx.moveTo(x - w, yy); ctx.lineTo(x + w, yy - 3); ctx.stroke(); }
+      ctx.strokeStyle = S.plateOutline; ctx.lineWidth = 1.2; ctx.strokeRect(x - w, top, w * 2, lift);
+    }
+    y = y - lift;
   }
-  ctx.beginPath(); ctx.arc(x, y, R, 0, 7);
-  const g = ctx.createRadialGradient(x - R * 0.35, y - R * 0.35, R * 0.1, x, y, R); g.addColorStop(0, shade(S.screwColor, 0.6)); g.addColorStop(0.65, S.screwColor); g.addColorStop(1, S.screwDark);
-  ctx.fillStyle = g; ctx.fill(); ctx.lineWidth = Math.max(1.5, S.outlineW * 0.9); ctx.strokeStyle = S.plateOutline; ctx.stroke();
-  ctx.beginPath(); ctx.arc(x, y, R * 0.78, 0, 7); ctx.lineWidth = 1; ctx.strokeStyle = 'rgba(80,70,110,0.45)'; ctx.stroke();
+  if (all || part === 'head') {
+    ctx.beginPath(); ctx.arc(x, y, R, 0, 7);
+    const g = ctx.createRadialGradient(x - R * 0.35, y - R * 0.35, R * 0.1, x, y, R); g.addColorStop(0, shade(S.screwColor, 0.6)); g.addColorStop(0.65, S.screwColor); g.addColorStop(1, S.screwDark);
+    ctx.fillStyle = g; ctx.fill(); ctx.lineWidth = Math.max(1.5, S.outlineW * 0.9); ctx.strokeStyle = S.plateOutline; ctx.stroke();
+    ctx.beginPath(); ctx.arc(x, y, R * 0.78, 0, 7); ctx.lineWidth = 1; ctx.strokeStyle = 'rgba(80,70,110,0.45)'; ctx.stroke();
+  }
+  if (!all && part !== 'cross') return;
   // 十字槽
   ctx.save(); ctx.translate(x, y); ctx.rotate(ang);
   const L = R * 0.62, T = R * 0.17;
