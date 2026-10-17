@@ -406,6 +406,6 @@ document.getElementById('btnExport').onclick = () => { const a = document.create
 document.getElementById('btnImport').onclick = () => document.getElementById('importFile').click();
 document.getElementById('importFile').onchange = (e) => { const f = e.target.files[0]; if (!f) return; f.text().then(t => { S = migrate(JSON.parse(t)); saveSettings(S); buildPanel(); loadHand(); sfx.setBgm(S.bgm, S.bgmVol); newGame(); toast('已导入设置'); }).catch(() => toast('导入失败')); };
 document.getElementById('btnReset').onclick = () => { if (!confirm('恢复全部默认设置？')) return; S = { ...DEFS }; saveSettings(S); buildPanel(); loadHand(); newGame(); };
-window.__game = { doExportAE, doExport3D, aeRec, autoSolve, newGame, get S() { return S; }, set(k, v) { S[k] = v; applyChange(k); buildPanel(); }, get st() { return st; }, get L() { return L; }, get plateVis() { return plateVis; }, get screwVis() { return screwVis; }, startRec, stopRec };
+window.__game = { holeWorld: (hi) => holeWorld(hi), view: () => view(), tapHole: (hi) => { const w = holeWorld(hi), v = view(); return tapAt(w[0] * v.b + v.tx, w[1] * v.b + v.ty); }, get vHole() { return vHole; }, doExportAE, doExport3D, aeRec, autoSolve, newGame, get S() { return S; }, set(k, v) { S[k] = v; applyChange(k); buildPanel(); }, get st() { return st; }, get L() { return L; }, get plateVis() { return plateVis; }, get screwVis() { return screwVis; }, startRec, stopRec };
 buildPanel(); loadHand(); newGame(); if (S.bgm) sfx.setBgm(S.bgm, S.bgmVol);
 requestAnimationFrame(loop);
