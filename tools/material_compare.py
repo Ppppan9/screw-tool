@@ -3,7 +3,7 @@ import sys
 from PIL import Image, ImageDraw, ImageFont
 ref = Image.open(sys.argv[1]).convert('RGB'); tool = Image.open(sys.argv[2]).convert('RGB'); out = sys.argv[3]
 # (名称, 中心x, 中心y, 半边长) 720x1280 坐标
-REG = [('finger plate', 262, 405, 48), ('palm 2-screw plate', 410, 690, 56), ('screw head', 385, 363, 26),
+REG = [('finger plate', 262, 405, 48), ('palm 2-screw plate', 454, 756, 56), ('screw head', 385, 363, 26),
        ('seam', 380, 470, 30), ('base / wrist cuff', 380, 880, 56), ('empty hole', 401, 667, 26),
        ('edge / thickness / shadow', 460, 850, 40)]
 Z = 260

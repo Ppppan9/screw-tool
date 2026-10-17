@@ -95,7 +95,7 @@ export function drawBase(ctx, L, S) {
   const all = L.base.polys.flat().concat(L.base.capsules.flatMap(c => c.pts)); const bb = bbox(all); bb.x -= 50; bb.y -= 50; bb.w += 100; bb.h += 100;
   // M-C 实测：参考底板亮笔触 #ebc4c6、暗笔触仅 #b07b71（亮度 sd 17）→ 暗纹弱、亮纹强且细密
   grain(ctx, bb, '#7a3f33', S.baseGrain * 0.45, rnd, -0.62, 3, 0.8, 1.6, 10, 26);
-  grain(ctx, bb, '#fff1ee', S.baseGrain * 3, rnd, -0.62, 5, 0.8, 2.2, 8, 26, 0.6);
+  grain(ctx, bb, '#fff1ee', S.baseGrain * 2.6, rnd, -0.62, 5, 0.8, 2.2, 8, 26, 1.0);
   // 玻璃感内高光边（参考右缘/下缘可见白色亮边）
   ctx.save(); ctx.translate(-1.2, -1.6); ctx.lineJoin = 'round'; ctx.lineWidth = 3.2; ctx.strokeStyle = `rgba(255,248,246,${S.baseGloss})`; basePath(ctx, L); ctx.stroke(); ctx.restore();
   ctx.restore();
