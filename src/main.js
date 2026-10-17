@@ -45,7 +45,10 @@ function newGame() {
   st = initState(L); active = null; lastVacated = -1; finishedAt = 0; endShownAt = 0;
   plateVis = null; vHole = st.screwHole.slice(); pend = [];
   screwVis = L.screws.map((s, i) => ({ ang: (i * 1.7) % (Math.PI / 2) - 0.3, lift: 0, sc: 1, x: 0, y: 0, anim: null }));
-  rebuild(); recStart();
+  rebuild();
+  // v1.4.2：与麻将工具一致——打开页面/重新开始/自动通关都不再自动开始 AE 记录。
+  // 记录中重新开局：记录保持进行（按钮继续计时），时间轴从新关卡重新开始（AE 工程只描述一个关卡）
+  if (aeActive()) { aeRec.start(); updateAEButtons(); }
   status(`板 ${L.plates.length} 块，螺丝 ${L.screws.length} 颗，孔 ${L.holes.length} 个`);
 }
 function rebuild() {
@@ -266,7 +269,7 @@ async function autoSolve() {
   if (active !== null) { dropBack(active); active = null; }
   const plan = solve(L, st); if (!plan) { status('当前局面无解，请重新开始'); return; }
   const tok = ++autoToken; autoRunning = true; updAutoBtn(); sfx.resume();
-  hand.x = 820; hand.y = 1450; hand.visible = true; recStart();
+  hand.x = 820; hand.y = 1450; hand.visible = true;
   if (S.autoRec && !rec) startRec();
   sfx.playBgm();
   try {
@@ -315,9 +318,10 @@ function startRec() {
     const a = document.createElement('a'); a.href = url; a.download = `screw_${new Date().toISOString().replace(/[:.]/g, '-')}.${ext}`; a.textContent = `⬇ ${a.download} (${(blob.size / 1e6).toFixed(1)}MB)`;
     document.getElementById('recList').prepend(a); window.__lastRec = { size: blob.size, type }; rec = null; updRecBtn();
     // 与麻将工具一致：录制视频时同步记录 AE 时间轴，停止录制后自动导出
-    if (S.aeWithRec && aeRec.rec && aeRec.rec.frames > 1) { recClosed = true; doExportAE().catch(e => console.error(e)); }
+    if (aeByRec && aeActive()) aeStopAndExport().catch(e => console.error(e));
+    aeByRec = false;
   };
-  rec.start(250); recT0 = now(); updRecBtn(); if (S.aeWithRec && (!aeRec.rec || recClosed)) recStart();
+  rec.start(250); recT0 = now(); updRecBtn(); aeByRec = false; if (S.aeWithRec && !aeActive()) { recStart(); aeByRec = true; }
 }
 function stopRec() { if (rec && rec.state !== 'inactive') rec.stop(); }
 function updRecBtn() { const b = document.getElementById('btnRec'); b.textContent = rec ? '■ 停止录制' : '⏺ 开始录制'; b.classList.toggle('on', !!rec); }
@@ -328,21 +332,27 @@ const aeRec = createAERecorder({
   env: () => ({ L, st, S, plateVis, screwVis, view, sprites, bgCanvas, baseCanvas, canvas: cv, handImg: hand.img }),
   drawTextsTo: (g) => withCtx(g, drawTexts), drawEndTo: (g, p) => withCtx(g, () => drawEnd(0, p)),
 });
-let recClosed = false;
-function recStart() { aeRec.start(); recClosed = false; updateAEButtons(); }
-const aeActive = () => !!aeRec.rec && !recClosed;
+let recClosed = false, aeLastRec = null, aeByRec = false;
+function recStart() { aeRec.start(); recClosed = false; updateAEButtons(); toast('开始记录 AE 时间轴'); }
+function aeActive() { return !!aeRec.rec && !recClosed; }
+// 停止记录：本段成为“最近记录”（导出 AE / 3D 默认用它）
+function aeStop() { const r = aeRec.rec; recClosed = true; updateAEButtons(); if (r && r.frames > 1) aeLastRec = r; return r && r.frames > 1 ? r : null; }
+async function aeStopAndExport() { const r = aeStop(); if (!r) { toast('没有记录到内容'); return null; } return doExportAE(true, r); }
+const curRec = () => aeActive() ? aeRec.rec : aeLastRec && aeLastRec.L === L ? aeLastRec : null; // 最近记录只对同一关卡有效（素材按当前关卡渲染）
 function updateAEButtons() { const b = document.getElementById('btn_aeToggle'); if (!b) return; b.textContent = aeActive() ? `■ 停止并导出（${((now() - (aeRec.rec.t0 || now())) / 1000).toFixed(1)}s）` : '● 开始记录'; b.classList.toggle('on', aeActive()); }
-const PANEL_ACTIONS = { aeToggle: () => { if (aeActive()) { recClosed = true; updateAEButtons(); return doExportAE(); } recStart(); }, aeExport: () => doExportAE(), export3d: () => doExport3D() };
+const PANEL_ACTIONS = { aeToggle: () => aeActive() ? aeStopAndExport() : recStart(), aeExport: () => doExportAE(), export3d: () => doExport3D() };
 function recTailDone(t) { return finishedAt && t - finishedAt > (S.endCard ? S.endDelay + 400 : 0) + Math.max(800, S.tailSec * 1000); }
 function download(blob, name) { const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; a.textContent = `⬇ ${name} (${(blob.size / 1e6).toFixed(1)}MB)`; document.getElementById('recList').prepend(a); a.click(); }
-async function doExportAE(save = true) {
-  status('正在生成 AE 工程…'); const r = await aeRec.exportZip(); window.__aeLast = r;
+async function doExportAE(save = true, rec = curRec()) {
+  if (!rec) { toast('请先用“开始记录”记录一段（自动通关或手动游玩）'); return null; }
+  status('正在生成 AE 工程…'); const r = await aeRec.exportZip(rec); window.__aeLast = r;
   if (save) download(r.blob, r.name); status(`AE 工程：${r.stats.layers} 图层，${r.stats.keys} 关键帧`); return r;
 }
-async function doExport3D(save = true) {
+async function doExport3D(save = true, rec = curRec()) {
+  if (!rec) { toast('请先用“开始记录”记录一段（自动通关或手动游玩）'); return null; }
   // 与麻将工具一致：3D 导出复用 AE 记录，按 3D 帧率逐帧烘焙、英文命名、同画布尺寸、混合+逐事件音频
-  status('正在生成 3D 动画…'); const ae = await aeRec.exportZip(undefined, { aeFps: String(+S.export3dFps || 30), aeSize: 'canvas', aeSampling: 'bake', aeNames: 'en', aeAudio: 'both' });
-  const r = await export3D({ S, ae, env: { L, view: view(), sprites, bgCanvas, baseCanvas, handImg: hand.img, rec: aeRec.rec }, drawTextsTo: (g) => withCtx(g, drawTexts), drawEndTo: (g, p, nd) => withCtx(g, () => drawEnd(0, p, nd)) });
+  status('正在生成 3D 动画…'); const ae = await aeRec.exportZip(rec, { aeFps: String(+S.export3dFps || 30), aeSize: 'canvas', aeSampling: 'bake', aeNames: 'en', aeAudio: 'both' });
+  const r = await export3D({ S, ae, env: { L, view: view(), sprites, bgCanvas, baseCanvas, handImg: hand.img, rec }, drawTextsTo: (g) => withCtx(g, drawTexts), drawEndTo: (g, p, nd) => withCtx(g, () => drawEnd(0, p, nd)) });
   window.__e3dLast = r; if (save) download(r.blob, r.name); status(`3D 动画：${r.stats.plates} 板，${r.stats.screws} 螺丝，${r.duration.toFixed(2)}s`); return r;
 }
 
@@ -351,7 +361,7 @@ let lastT = now();
 function loop(t) {
   const dt = Math.min(0.05, (t - lastT) / 1000); lastT = t;
   step(t, dt); updPress(t); draw(t);
-  if (aeRec.rec && !recClosed) { if (recTailDone(t)) { recClosed = true; updateAEButtons(); } else aeRec.sample(t); if (t - (loop.aeBtnT || 0) > 250) { loop.aeBtnT = t; updateAEButtons(); } }
+  if (aeActive()) { if (recTailDone(t)) aeStop(); else aeRec.sample(t); if (t - (loop.aeBtnT || 0) > 250) { loop.aeBtnT = t; updateAEButtons(); } }
   if (rec) document.getElementById('recInfo').textContent = `录制中 ${((t - recT0) / 1000).toFixed(1)}s`; else document.getElementById('recInfo').textContent = '';
   requestAnimationFrame(loop);
 }
@@ -406,6 +416,6 @@ document.getElementById('btnExport').onclick = () => { const a = document.create
 document.getElementById('btnImport').onclick = () => document.getElementById('importFile').click();
 document.getElementById('importFile').onchange = (e) => { const f = e.target.files[0]; if (!f) return; f.text().then(t => { S = migrate(JSON.parse(t)); saveSettings(S); buildPanel(); loadHand(); sfx.setBgm(S.bgm, S.bgmVol); newGame(); toast('已导入设置'); }).catch(() => toast('导入失败')); };
 document.getElementById('btnReset').onclick = () => { if (!confirm('恢复全部默认设置？')) return; S = { ...DEFS }; saveSettings(S); buildPanel(); loadHand(); newGame(); };
-window.__game = { holeWorld: (hi) => holeWorld(hi), view: () => view(), tapHole: (hi) => { const w = holeWorld(hi), v = view(); return tapAt(w[0] * v.b + v.tx, w[1] * v.b + v.ty); }, get vHole() { return vHole; }, doExportAE, doExport3D, aeRec, autoSolve, newGame, get S() { return S; }, set(k, v) { S[k] = v; applyChange(k); buildPanel(); }, get st() { return st; }, get L() { return L; }, get plateVis() { return plateVis; }, get screwVis() { return screwVis; }, startRec, stopRec };
+window.__game = { holeWorld: (hi) => holeWorld(hi), view: () => view(), tapHole: (hi) => { const w = holeWorld(hi), v = view(); return tapAt(w[0] * v.b + v.tx, w[1] * v.b + v.ty); }, get vHole() { return vHole; }, doExportAE, doExport3D, aeRec, aeStart: () => recStart(), aeStop: () => aeStop(), aeActive: () => aeActive(), get aeLastRec() { return aeLastRec; }, get mediaRec() { return rec; }, autoSolve, newGame, get S() { return S; }, set(k, v) { S[k] = v; applyChange(k); buildPanel(); }, get st() { return st; }, get L() { return L; }, get plateVis() { return plateVis; }, get screwVis() { return screwVis; }, startRec, stopRec };
 buildPanel(); loadHand(); newGame(); if (S.bgm) sfx.setBgm(S.bgm, S.bgmVol);
 requestAnimationFrame(loop);

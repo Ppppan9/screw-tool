@@ -54,3 +54,4 @@
 - S3 test/physics-test.mjs（npm run test:physics）：按参考节奏点击前两手 → 板23 落座后 80ms 掉落（tap1 后 948ms，之前 dy=0），板22 落座后 62ms 开始摆，0/36/73ms = 1.1/10.3/17°，支点漂移 0；screenshots/physics_ref_vs_tool.jpg（tools/physics_compare.py）；/workspace/screw_physics_sample.mp4。
 - 未对齐：工具飞行+拧入 360ms（参考 ~233ms），所以同一时刻对比工具晚 ~180ms；参考里掉落板看起来略放大（可能是运动模糊），未模拟；参考片段中没有“摆动板再拧走最后一颗”的画面。
 - v1.4.1：螺丝动画时长对齐参考（liftDur 140→120, flyDur 230→133, screwInDur 130→100, hoverBob 2→0；设置 v9 只替换仍为旧默认的值）。test:physics 实测：板23 掉落 tap1 后 +794ms（参考 +767），板22 摆动 +2251ms（参考 +2300）；tap2→落座 257/254ms（参考 167–333）。
+- v1.4.2：打开页面不再自动开始记录（与麻将一致）。newGame()/autoSolve() 去掉 recStart()；AE 记录只由「● 开始记录」或录制视频（aeWithRec，仅在录制前未在记录时由它开启、停止录制时一并停止并导出）开始；MediaRecorder 只由「开始录制」或 autoRec（默认关）启动。导出 AE/3D：记录中用当前记录，否则用同一关卡的最近一次记录，没有则提示“请先用“开始记录”记录一段”。记录中重新开局：保持记录，时间轴从新关卡重新开始。测试 test/no-autorec.mjs（npm run test:norec，全新 localStorage + MediaRecorder 计数）；test/ae-export.mjs 显式 aeStart()。

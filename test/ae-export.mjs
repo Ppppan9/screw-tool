@@ -9,12 +9,12 @@ const errs = []; p.on('pageerror', e => errs.push(String(e))); p.on('console', m
 await p.goto('file://' + process.cwd() + '/index.html'); await p.waitForTimeout(400);
 if (fs.existsSync('test/assets/stylus.png')) await p.setInputFiles('#file_handImage', 'test/assets/stylus.png');
 await p.evaluate(() => { __game.set('handAnchorX', 0.04); __game.set('handAnchorY', 0.03); __game.set('endCard', true); __game.set('discShow', true); __game.set('autoSpeed', 1.6); window.__aeSnapEvery = +(new URLSearchParams('').get('x') || 0); });
-await p.evaluate(n => { window.__aeSnapEvery = n; __game.autoSolve(); __game.aeRec.rec.snapEvery = n; __game.aeRec.rec.maxSnaps = 60; }, +(process.env.SNAP_EVERY || 45));
+await p.evaluate(n => { window.__aeSnapEvery = n; __game.aeStart(); __game.autoSolve(); __game.aeRec.rec.snapEvery = n; __game.aeRec.rec.maxSnaps = 60; }, +(process.env.SNAP_EVERY || 45));
 const t0 = Date.now();
 while (!(await p.evaluate(() => window.__finished))) { if (Date.now() - t0 > 150000) throw new Error('timeout'); await p.waitForTimeout(200); }
 await p.waitForTimeout(3500); // 结束卡 + 尾巴
 const info = await p.evaluate(async () => {
-  const r = await __game.doExportAE(false); const rec = __game.aeRec.rec;
+  const r = await __game.doExportAE(false); const rec = __game.aeLastRec || __game.aeRec.rec;
   const buf = new Uint8Array(await r.blob.arrayBuffer()); let bin = ''; for (let i = 0; i < buf.length; i += 0x8000) bin += String.fromCharCode.apply(null, buf.subarray(i, i + 0x8000));
   return { zip: btoa(bin), name: r.name, stats: r.stats, files: r.files, duration: r.timeline.meta.duration, snaps: rec.snaps.map(s => ({ t: s.t, url: s.url })), st: { removed: __game.st.removed.size, plates: __game.L.plates.length } };
 });
