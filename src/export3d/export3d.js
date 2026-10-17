@@ -66,6 +66,8 @@ export async function export3D({ S, ae, env, drawTextsTo, drawEndTo }) {
     const vis = new THREE.Group(); vis.name = nm + '_vis'; plates.add(vis);
     const node = new THREE.Group(); node.name = nm; node.position.set(cx, top(p.layer), cz); node.userData = { layer: p.layer, screws: p.holes.length }; vis.add(node);
     const mesh = new THREE.Mesh(g, [basic('mat_' + nm, { map: tex(c, nm) }), basic('mat_plate_side', { color: new THREE.Color(S.plateShade) })]); mesh.name = nm + '_mesh'; node.add(mesh);
+    // 贴面：完整板面贴图（含描边外半边与厚度边）作为透明四边形贴在顶面上，保证俯视画面与网页一致
+    const skin = quad(nm + '_skin', sp.w * v.b, sp.h * v.b, sp.w * v.b / 2, sp.h * v.b / 2, basic('mat_' + nm + '_skin', { map: tex(c, nm), transparent: true, depthWrite: false })); skin.position.y = 0.0002; node.add(skin);
     stats.plates++;
     const at = sampler(s), st = stepper(s);
     visTrack(vis.name, t => st(t)[1] !== 2);
@@ -120,8 +122,14 @@ export async function export3D({ S, ae, env, drawTextsTo, drawEndTo }) {
   const full = fn => { const c = mk(720 * 2, 1280 * 2), g = c.getContext('2d'); g.setTransform(2, 0, 0, 2, 0, 0); fn(g); return c; };
   if (S.discShow || S.vertShow) { const q = quad('overlay_text', 720, 1280, 360, 640, basic('mat_overlay_text', { map: tex(full(drawTextsTo), 'text'), transparent: true, depthWrite: false })); q.position.y = 0.07; root.add(q); }
   const endS = rec.end; if (endS.some(e => e[1] > 0)) {
-    const q = quad('end_card', 720, 1280, 360, 640, basic('mat_end_card', { map: tex(full(g => drawEndTo(g, 1)), 'end_card'), transparent: true, depthWrite: false })); const vis = new THREE.Group(); vis.name = 'end_card_vis'; vis.position.y = 0.075; vis.add(q); root.add(vis);
-    const at = sampler(endS); visTrack(vis.name, t => at(t)[1] > 0.001); opacity.end_card = times.map(t => [t, Math.round(at(t)[1] * 100) / 100]);
+    // 压暗层单独做成黑色实色面（Blender 脚本按 sRGB 等效换算不透明度），内容（按钮+文字）为贴图面
+    const dim = quad('end_card_dim', 720, 1700, 360, 840, basic('mat_end_card_dim', { color: 0x000000, transparent: true, depthWrite: false, opacity: 0.55 }));
+    const q = quad('end_card', 720, 1280, 360, 640, basic('mat_end_card', { map: tex(full(g => drawEndTo(g, 1, true)), 'end_card'), transparent: true, depthWrite: false })); q.position.y = 0.001;
+    const vis = new THREE.Group(); vis.name = 'end_card_vis'; vis.position.y = 0.075; vis.add(dim, q); root.add(vis);
+    const at = sampler(endS); visTrack(vis.name, t => at(t)[1] > 0.001);
+    const ok = reduce(times, times.map(t => Math.round(at(t)[1] * 100) / 100), 1);
+    opacity.end_card = ok.T.map((t, i) => [t, ok.V[i]]); opacity.end_card_dim = ok.T.map((t, i) => [t, Math.round(ok.V[i] * 55) / 100]);
+    nodes.push({ name: 'end_card_dim', kind: 'solid' });
   }
   if (env.handImg && S.export3dHand !== false && rec.hand.some(e => e[4])) {
     const im = env.handImg, c = mk(im.width, im.height); c.getContext('2d').drawImage(im, 0, 0);

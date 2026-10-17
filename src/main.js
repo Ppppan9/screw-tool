@@ -168,9 +168,9 @@ function drawTexts() {
 }
 function endAlpha(t) { return finishedAt && S.endCard && t - finishedAt > S.endDelay ? Math.min(1, (t - finishedAt - S.endDelay) / 400) : 0; }
 function withCtx(g, fn) { const save = ctx; ctx = g; try { fn(); } finally { ctx = save; } }
-function drawEnd(t, pv) {
+function drawEnd(t, pv, noDim) {
   const p = pv != null ? pv : endAlpha(t);
-  ctx.save(); ctx.globalAlpha = p; ctx.fillStyle = 'rgba(0,0,0,.55)'; ctx.fillRect(0, -200, 720, 1700);
+  ctx.save(); ctx.globalAlpha = p; ctx.fillStyle = 'rgba(0,0,0,.55)'; if (!noDim) ctx.fillRect(0, -200, 720, 1700);
   ctx.fillStyle = '#ffd54a'; ctx.beginPath(); ctx.roundRect(160, 600, 400, 100, 50); ctx.fill();
   ctx.fillStyle = '#4a2a00'; ctx.font = 'bold 34px "Microsoft YaHei",sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(S.endText, 360, 650);
   ctx.restore();
@@ -312,7 +312,7 @@ async function doExportAE(save = true) {
 }
 async function doExport3D(save = true) {
   status('正在生成 3D 动画…'); const ae = await aeRec.exportZip();
-  const r = await export3D({ S, ae, env: { L, view: view(), sprites, bgCanvas, baseCanvas, handImg: hand.img, rec: aeRec.rec }, drawTextsTo: (g) => withCtx(g, drawTexts), drawEndTo: (g, p) => withCtx(g, () => drawEnd(0, p)) });
+  const r = await export3D({ S, ae, env: { L, view: view(), sprites, bgCanvas, baseCanvas, handImg: hand.img, rec: aeRec.rec }, drawTextsTo: (g) => withCtx(g, drawTexts), drawEndTo: (g, p, nd) => withCtx(g, () => drawEnd(0, p, nd)) });
   window.__e3dLast = r; if (save) download(r.blob, r.name); status(`3D 动画：${r.stats.plates} 板，${r.stats.screws} 螺丝，${r.duration.toFixed(2)}s`); return r;
 }
 document.getElementById('btnAE').onclick = () => doExportAE().catch(e => { status('导出失败：' + e.message); console.error(e); });

@@ -253,7 +253,7 @@ NODE = {n["name"]: n for n in meta.get("nodes", [])}
 n_vis = 0
 for name in meta.get("opacity", {}):
     o = bpy.data.objects.get(name); n = NODE.get(name)
-    if not o or not n or not o.parent:
+    if not o or not n or not o.parent or "in" not in n:
         continue
     p = o.parent
     ad = p.animation_data
