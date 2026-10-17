@@ -1,5 +1,5 @@
 // 设置定义：所有可调参数。版本号 + 迁移。
-export const SETTINGS_VERSION = 1;
+export const SETTINGS_VERSION = 2;
 export const STORE_KEY = 'screwTool.settings';
 // [key, 标签, 类型, 默认, min, max, step]  类型: range/color/bool/select/text/file
 export const GROUPS = [
@@ -24,24 +24,25 @@ export const GROUPS = [
     ['moveRule', '落孔规则', 'select', 'tap2', [['tap2', '两次点击：先点螺丝再点孔（参考视频）'], ['nearest', '单击：最近空孔'], ['vacated', '单击：优先刚空出的孔'], ['random', '单击：随机空孔']]],
   ]],
   ['外观', [
-    ['bgColor', '背景色', 'color', '#668772'],
+    ['bgMode', '背景类型', 'select', 'image', [['image', '参考视频提取背景图（默认）'], ['procedural', '程序化绘制（纯色+纸纹+薄荷叶）']]],
+    ['bgColor', '背景色(程序化)', 'color', '#668772'],
     ['bgNoise', '背景纸纹强度', 'range', 0.10, 0, 0.4, 0.01],
-    ['leafOpacity', '薄荷叶线稿透明度', 'range', 0.55, 0, 1, 0.01],
+    ['leafOpacity', '薄荷叶线稿透明度', 'range', 0.35, 0, 1, 0.01],
     ['leafColor', '叶子线条色', 'color', '#eef3ea'],
-    ['leafScale', '叶子大小', 'range', 0.85, 0.5, 2, 0.05],
+    ['leafScale', '叶子大小', 'range', 1, 0.5, 2, 0.05],
     ['baseColor', '底板颜色', 'color', '#bd8784'],
     ['baseGrain', '底板木纹强度', 'range', 0.18, 0, 0.6, 0.01],
     ['baseOutline', '底板描边色', 'color', '#4a2626'],
-    ['plateColor', '板块颜色', 'color', '#cdc6f0'],
+    ['plateColor', '板块颜色', 'color', '#c9c1ee'],
     ['plateShade', '板块厚度边颜色', 'color', '#7b70ad'],
-    ['plateThick', '板块厚度(px)', 'range', 5, 0, 14, 0.5],
-    ['plateGrain', '板块木纹/排线强度', 'range', 0.35, 0, 1, 0.01],
-    ['plateOutline', '板块描边色', 'color', '#2f2438'],
+    ['plateThick', '板块厚度(px)', 'range', 3, 0, 14, 0.5],
+    ['plateGrain', '板块木纹/排线强度', 'range', 0.28, 0, 1, 0.01],
+    ['plateOutline', '板块描边色', 'color', '#352840'],
     ['outlineW', '描边宽度', 'range', 2.6, 0, 6, 0.1],
     ['plateRadius', '板块圆角倍率', 'range', 1, 0, 2, 0.05],
-    ['plateShadow', '板块投影', 'range', 0.35, 0, 1, 0.01],
-    ['screwSize', '螺丝直径(px)', 'range', 38, 16, 70, 1],
-    ['screwColor', '螺丝主色', 'color', '#d4cff8'],
+    ['plateShadow', '板块投影', 'range', 0.25, 0, 1, 0.01],
+    ['screwSize', '螺丝直径(px)', 'range', 42, 16, 70, 1],
+    ['screwColor', '螺丝主色', 'color', '#dcd8fb'],
     ['screwDark', '螺丝暗部色', 'color', '#6d6890'],
     ['screwCross', '十字槽颜色', 'color', '#3c3a4c'],
     ['holeSize', '孔直径(px)', 'range', 30, 12, 60, 1],
@@ -120,6 +121,8 @@ export function migrate(obj) {
   let v = obj.version || 0, s = { ...(obj.settings || obj) };
   // v0 -> v1: 早期草稿无版本号，字段直接平铺
   if (v < 1) v = 1;
+  // v1 -> v2：新增背景图模式；视觉默认值调整（v1 旧默认值替换为新默认）
+  if (v < 2) { const OLD = { leafOpacity: 0.55, leafScale: 0.85, plateColor: '#cdc6f0', plateOutline: '#2f2438', plateThick: 5, plateGrain: 0.35, plateShadow: 0.35, screwSize: 38, screwColor: '#d4cff8' }; for (const k in OLD) if (s[k] === OLD[k]) delete s[k]; v = 2; }
   const out = { ...DEFS };
   for (const k in DEFS) if (k in s && typeof s[k] === typeof DEFS[k]) out[k] = s[k];
   return out;

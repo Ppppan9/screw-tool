@@ -2,6 +2,8 @@ import { referenceLevel, generateLevel, initState, holeUsable, screwFree, applyM
 import { GROUPS, DEFS, loadSettings, saveSettings, migrate, exportJSON } from './settings.js';
 import { drawBackground, drawBase, plateSprite, drawHole, drawScrew } from './render.js';
 import { Sfx } from './audio.js';
+import BG_REF from './bg_ref.jpg';
+const bgImg = new Image(); bgImg.src = BG_REF; bgImg.onload = () => { if (L) rebuild(); };
 
 let S = loadSettings();
 const cv = document.getElementById('stage'), ctx = cv.getContext('2d');
@@ -37,7 +39,7 @@ function rebuild() {
   cv.width = S.canvasW; cv.height = S.canvasH;
   const dpr = view().k * S.boardScale;
   bgCanvas = document.createElement('canvas'); bgCanvas.width = cv.width; bgCanvas.height = cv.height;
-  drawBackground(bgCanvas, S, cv.width, cv.height, view().k);
+  drawBackground(bgCanvas, S, cv.width, cv.height, view().k, bgImg);
   sprites = L.plates.map((p, i) => plateSprite(p, S, i, Math.max(1, dpr)));
   baseCanvas = document.createElement('canvas'); baseCanvas.width = Math.ceil(720 * dpr); baseCanvas.height = Math.ceil(1280 * dpr);
   const bc = baseCanvas.getContext('2d'); bc.scale(dpr, dpr); drawBase(bc, L, S);

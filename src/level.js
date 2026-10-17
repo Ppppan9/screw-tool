@@ -1,3 +1,4 @@
+import TRACE from './ref_trace.json';
 // 关卡数据与逻辑。坐标系 720x1280。参考关卡由 ref/frames/g_004.jpg (t=2.93s) 逐点描绘：crop 偏移 (110,310)
 const OX = 0, OY = 0;
 const P = (pts) => pts.map(([x, y]) => [x + OX, y + OY]);
@@ -28,33 +29,16 @@ function segQuad(a, b, w) {
   return [[a[0] + nx, a[1] + ny], [b[0] + nx, b[1] + ny], [b[0] - nx, b[1] - ny], [a[0] - nx, a[1] - ny]];
 }
 
+// v1.1：板块轮廓与手型由 tools/trace_plates.py 从参考帧自动分割得到（ref_trace.json）
 export function referenceLevel() {
-  const plates = [], holes = [], screws = [], base = { polys: [], capsules: [] };
-  const addHole = (x, y) => { holes.push({ x, y }); return holes.length - 1; };
-  const gap = 1.5;
-  for (const f of FINGERS) {
-    const pts = f.pts.map(([x, y]) => [x + OX, y + OY]);
-    { const [t0, t1] = pts, dx = t1[0] - t0[0], dy = t1[1] - t0[1], l = Math.hypot(dx, dy), ins = f.w / 2 - 1; const cp = pts.slice(); cp[0] = [t0[0] + dx / l * ins, t0[1] + dy / l * ins]; base.capsules.push({ pts: cp, w: f.w + 4 }); }
-    for (let i = 0; i < pts.length - 1; i++) {
-      let a = pts[i], b = pts[i + 1];
-      const dx = b[0] - a[0], dy = b[1] - a[1], L = Math.hypot(dx, dy);
-      const sh = (s) => [s[0] + dx / L * gap, s[1] + dy / L * gap];
-      const a2 = sh(a);
-      const b2 = [b[0] - dx / L * gap, b[1] - dy / L * gap];
-      const c = [(a[0] + b[0]) / 2 + (i === 0 ? dx / L * 6 : 0), (a[1] + b[1]) / 2 + (i === 0 ? dy / L * 6 : 0)];
-      const hi = addHole(c[0], c[1]);
-      plates.push({ poly: segQuad(a2, b2, f.w), tip: i === 0, layer: 0, holes: [hi], radius: i === 0 ? f.w * 0.46 : 9 });
-    }
-  }
-  for (const p of PALM) {
-    const hs = p.screws.map(([x, y]) => addHole(x + OX, y + OY));
-    plates.push({ poly: P(p.pts), layer: 0, holes: hs, radius: 12 });
-  }
-  base.polys.push(P(BASE_PALM));
-  for (const [x, y] of EMPTY) addHole(x + OX, y + OY);
-  for (const [x, y] of HIDDEN) addHole(x + OX, y + OY);
-  // 每块板的每个孔一颗螺丝；空孔不放
-  plates.forEach((pl, pi) => pl.holes.forEach(h => screws.push({ hole: h })));
+  const plates = [], holes = [], screws = [], base = { polys: [TRACE.base], capsules: [] };
+  TRACE.plates.forEach(tp => {
+    const hs = tp.screws.map(([x, y]) => { holes.push({ x, y }); return holes.length - 1; });
+    plates.push({ poly: tp.poly, layer: 0, holes: hs, radius: 3 });
+  });
+  for (const [x, y] of EMPTY) holes.push({ x, y });
+  for (const [x, y] of HIDDEN) holes.push({ x, y });
+  plates.forEach(pl => pl.holes.forEach(h => screws.push({ hole: h })));
   return { plates, holes, screws, base, name: 'reference' };
 }
 

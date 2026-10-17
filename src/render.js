@@ -39,9 +39,10 @@ function sprig(ctx, x, y, rot, sc, rnd) {
   ctx.save(); ctx.translate(1, -170); ctx.rotate(-Math.PI / 2); leaf(ctx, 40, 18, rnd); ctx.restore();
   ctx.restore();
 }
-export const LEAVES = [[300, 120, 0.15, 1.15], [650, 360, -0.5, 1.5], [20, 330, 1.0, 1.1], [215, 650, 0.35, 1.0], [600, 1000, -0.25, 1.1], [150, 1200, 0.45, 1.5], [710, 1250, -0.7, 1.2], [-10, 800, 0.7, 0.8]];
-export function drawBackground(c, S, W, H, k) {
+export const LEAVES = [[300, 120, 0.2, 1.0], [640, 380, -0.6, 1.25], [10, 300, 1.1, 0.9], [130, 1180, 0.35, 1.3], [610, 1080, -0.3, 0.9], [740, 1250, -0.8, 1.0]];
+export function drawBackground(c, S, W, H, k, bgImg) {
   const ctx = c.getContext('2d'); ctx.fillStyle = S.bgColor; ctx.fillRect(0, 0, W, H);
+  if (S.bgMode === 'image' && bgImg && bgImg.complete && bgImg.naturalWidth) { const sc = Math.max(W / bgImg.naturalWidth, H / bgImg.naturalHeight); ctx.drawImage(bgImg, (W - bgImg.naturalWidth * sc) / 2, (H - bgImg.naturalHeight * sc) / 2, bgImg.naturalWidth * sc, bgImg.naturalHeight * sc); return; }
   const rnd = mulberry(7);
   const img = ctx.getImageData(0, 0, W, H), d = img.data;
   for (let i = 0; i < d.length; i += 4) { const n = (rnd() - 0.5) * 255 * S.bgNoise; d[i] += n; d[i + 1] += n; d[i + 2] += n; }
@@ -73,14 +74,14 @@ export function drawBase(ctx, L, S) {
     L.base.polys.forEach(p => { rrPath(ctx, p, 18); ctx.fill(); if (extra) { ctx.lineWidth = extra; ctx.lineJoin = 'round'; ctx.stroke(); } });
     L.base.capsules.forEach(c => { capsulePath(ctx, c.pts, c.w + extra); ctx.stroke(); });
   };
-  ctx.save(); ctx.translate(0, 6); shapes('rgba(30,20,20,0.35)', S.outlineW * 2 + 2); ctx.restore();
-  shapes(S.baseOutline, S.outlineW * 2);
+  ctx.save(); ctx.translate(0, 5); shapes('rgba(30,20,20,0.30)', 0); ctx.restore();
   shapes(S.baseColor, 0);
   // 木纹：只画在底板内（source-atop）
   ctx.save(); ctx.globalCompositeOperation = 'source-atop';
   const all = L.base.polys.flat().concat(L.base.capsules.flatMap(c => c.pts)); const bb = bbox(all); bb.x -= 50; bb.y -= 50; bb.w += 100; bb.h += 100;
   grain(ctx, bb, '#5a2c22', S.baseGrain, rnd, -0.5, 4); grain(ctx, bb, '#ffe0d0', S.baseGrain * 0.8, rnd, -0.5, 2);
   ctx.restore();
+  ctx.strokeStyle = S.baseOutline; ctx.lineWidth = S.outlineW; ctx.lineJoin = 'round'; L.base.polys.forEach(p => { rrPath(ctx, p, 18); ctx.stroke(); });
 }
 export function plateSprite(pl, S, idx, dpr) {
   const bb = bbox(pl.poly), pad = 14 + S.plateThick;
