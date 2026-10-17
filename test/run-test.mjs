@@ -9,7 +9,7 @@ await p.goto(url); await p.waitForTimeout(500);
 const shot = async (n) => fs.writeFileSync(`screenshots/${n}.png`, Buffer.from((await p.evaluate(() => document.getElementById('stage').toDataURL('image/png'))).split(',')[1], 'base64'));
 await shot('tool_start');
 // 上传测试手指图（仅测试用）
-if (fs.existsSync('test/assets/stylus.png')) await p.setInputFiles('#file_handImg', 'test/assets/stylus.png');
+if (fs.existsSync('test/assets/stylus.png')) await p.setInputFiles('#file_handImage', 'test/assets/stylus.png');
 await p.evaluate(() => { __game.set('handAnchorX', 0.04); __game.set('handAnchorY', 0.03); });
 const t0 = Date.now();
 await p.evaluate(() => { __game.startRec(); __game.autoSolve(); });

@@ -182,13 +182,16 @@ function drawEnd(t, pv, noDim) {
   const p = pv != null ? pv : endAlpha(t);
   ctx.save(); ctx.globalAlpha = p; ctx.fillStyle = 'rgba(0,0,0,.55)'; if (!noDim) ctx.fillRect(0, -200, 720, 1700);
   ctx.fillStyle = '#ffd54a'; ctx.beginPath(); ctx.roundRect(160, 600, 400, 100, 50); ctx.fill();
-  ctx.fillStyle = '#4a2a00'; ctx.font = 'bold 34px "Microsoft YaHei",sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(S.endText, 360, 650);
+  ctx.fillStyle = '#4a2a00'; ctx.font = 'bold 34px "Microsoft YaHei",sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(S.endTitle, 360, 650);
   ctx.restore();
 }
-function handState() { if (!S.handShow || !hand.img || !hand.visible) return null; return { x: hand.x, y: hand.y, s: S.handScale * (1 - (1 - S.handPress) * hand.press) }; }
+// 手指大小 = 画面宽比例（与麻将工具 handSize 一致）
+function handScaleOf() { return hand.img ? S.handSize * 720 / hand.img.width : 1; }
+const handHiddenByEnd = () => !S.endCardHand && endAlpha(now()) > 0;
+function handState() { if (!S.handShow || !hand.img || !hand.visible || handHiddenByEnd()) return null; return { x: hand.x, y: hand.y, s: handScaleOf() * (1 - S.pressDepth * hand.press) }; }
 function drawHand() {
-  if (!S.handShow || !hand.img || !hand.visible) return;
-  const im = hand.img, sc = S.handScale * (1 - (1 - S.handPress) * hand.press), w = im.width * sc, h = im.height * sc;
+  if (!S.handShow || !hand.img || !hand.visible || handHiddenByEnd()) return;
+  const im = hand.img, sc = handScaleOf() * (1 - S.pressDepth * hand.press), w = im.width * sc, h = im.height * sc;
   ctx.drawImage(im, hand.x - S.handAnchorX * w, hand.y - S.handAnchorY * h, w, h);
 }
 
@@ -221,17 +224,17 @@ function tapAt(px, py) { // 设计坐标
   return true;
 }
 function evtPos(e) { const r = cv.getBoundingClientRect(); const px = (e.clientX - r.left) / r.width * cv.width, py = (e.clientY - r.top) / r.height * cv.height; const v = view(); return { x: px / v.k, y: (py - v.oy) / v.k }; }
-cv.addEventListener('pointerdown', e => { if (autoRunning) return; const p = evtPos(e); hand.x = p.x; hand.y = p.y; hand.visible = true; if (S.tapFx) pressHand(); tapAt(p.x, p.y); });
+cv.addEventListener('pointerdown', e => { if (autoRunning) return; const p = evtPos(e); hand.x = p.x; hand.y = p.y; hand.visible = true; if (S.pressEnabled) pressHand(); tapAt(p.x, p.y); });
 cv.addEventListener('pointermove', e => { if (autoRunning) return; const p = evtPos(e); hand.x = p.x; hand.y = p.y; hand.visible = true; });
 cv.addEventListener('pointerleave', () => { if (!autoRunning) hand.visible = false; });
 function pressHand() { const t0 = now(); hand.pressT0 = t0; }
-function updPress(t) { if (!S.tapFx || hand.pressT0 == null) { hand.press = 0; return; } const p = (t - hand.pressT0) / 180; hand.press = p < 0 || p > 1 ? 0 : Math.sin(Math.PI * p); }
+function updPress(t) { if (!S.pressEnabled || hand.pressT0 == null) { hand.press = 0; return; } const p = (t - hand.pressT0) / 180; hand.press = p < 0 || p > 1 ? 0 : Math.sin(Math.PI * p); }
 
 // ---------- 自动通关 ----------
 const wait = (ms, tok) => new Promise((res, rej) => setTimeout(() => tok === autoToken ? res() : rej('stop'), ms / S.autoSpeed));
 const rr = (a, b) => a + Math.random() * Math.max(0, b - a);
 async function moveHand(tx, ty, tok) {
-  const x0 = hand.x, y0 = hand.y, dur = S.autoMoveDur / S.autoSpeed, t0 = now();
+  const x0 = hand.x, y0 = hand.y, dur = rr(S.moveMin, S.moveMax) / S.autoSpeed, t0 = now();
   const cx = (x0 + tx) / 2 + (Math.random() - 0.3) * 60, cy = (y0 + ty) / 2 + 40 + Math.random() * 40;
   while (true) {
     if (tok !== autoToken) throw 'stop';
@@ -241,9 +244,9 @@ async function moveHand(tx, ty, tok) {
   }
 }
 async function tapWorld(wx, wy, tok) {
-  const d = worldToDesign(wx, wy), j = S.autoJitter;
+  const d = worldToDesign(wx, wy), j = S.jitter;
   const x = d.x + (Math.random() - 0.5) * j, y = d.y + (Math.random() - 0.5) * j;
-  await moveHand(x, y, tok); if (S.tapFx) pressHand(); await wait(60, tok); tapAt(d.x, d.y); await wait(90, tok);
+  await moveHand(x, y, tok); if (S.pressEnabled) pressHand(); await wait(60, tok); tapAt(d.x, d.y); await wait(90, tok);
 }
 async function waitIdle(tok) { while (busy() || plateVis.some(p => p.s === 'wait')) { if (tok !== autoToken) throw 'stop'; await new Promise(r => requestAnimationFrame(r)); } }
 async function autoSolve() {
@@ -267,7 +270,7 @@ async function autoSolve() {
         const save = S.moveRule; S.moveRule = 'tap2';
         await tapWorld(h0.x, h0.y, tok); await wait(S.liftDur, tok); await tapWorld(h1.x, h1.y, tok); S.moveRule = save;
       }
-      await wait(rr(S.autoStepMin, S.autoStepMax), tok);
+      await wait(rr(S.delayMin, S.delayMax) + (Math.random() < S.thinkChance ? Math.random() * S.thinkMax : 0), tok);
     }
     await waitIdle(tok);
     if (S.handRest === 'br') await moveHand(820, 1450, tok); hand.visible = false;
@@ -276,7 +279,7 @@ async function autoSolve() {
 }
 function onFinish() {
   status('通关！'); window.__finished = true;
-  if (rec) setTimeout(stopRec, S.recTail + (S.endCard ? S.endDelay : 0));
+  if (rec && S.autoStop) setTimeout(stopRec, S.tailSec * 1000 + (S.endCard ? S.endDelay : 0));
 }
 function updAutoBtn() { const b = document.getElementById('btnAuto'); if (b) { b.textContent = autoRunning ? '■ 停止' : '▶ 自动通关'; b.classList.toggle('on', autoRunning); } }
 
@@ -300,8 +303,10 @@ function startRec() {
     const blob = new Blob(recChunks, { type }), url = URL.createObjectURL(blob);
     const a = document.createElement('a'); a.href = url; a.download = `screw_${new Date().toISOString().replace(/[:.]/g, '-')}.${ext}`; a.textContent = `⬇ ${a.download} (${(blob.size / 1e6).toFixed(1)}MB)`;
     document.getElementById('recList').prepend(a); window.__lastRec = { size: blob.size, type }; rec = null; updRecBtn();
+    // 与麻将工具一致：录制视频时同步记录 AE 时间轴，停止录制后自动导出
+    if (S.aeWithRec && aeRec.rec && aeRec.rec.frames > 1) { recClosed = true; doExportAE().catch(e => console.error(e)); }
   };
-  rec.start(250); recT0 = now(); updRecBtn();
+  rec.start(250); recT0 = now(); updRecBtn(); if (S.aeWithRec && (!aeRec.rec || recClosed)) recStart();
 }
 function stopRec() { if (rec && rec.state !== 'inactive') rec.stop(); }
 function updRecBtn() { const b = document.getElementById('btnRec'); b.textContent = rec ? '■ 停止录制' : '⏺ 开始录制'; b.classList.toggle('on', !!rec); }
@@ -313,27 +318,29 @@ const aeRec = createAERecorder({
   drawTextsTo: (g) => withCtx(g, drawTexts), drawEndTo: (g, p) => withCtx(g, () => drawEnd(0, p)),
 });
 let recClosed = false;
-function recStart() { aeRec.start(); recClosed = false; }
-function recTailDone(t) { return finishedAt && t - finishedAt > (S.endCard ? S.endDelay + 400 : 0) + Math.max(800, S.recTail); }
+function recStart() { aeRec.start(); recClosed = false; updateAEButtons(); }
+const aeActive = () => !!aeRec.rec && !recClosed;
+function updateAEButtons() { const b = document.getElementById('btn_aeToggle'); if (!b) return; b.textContent = aeActive() ? `■ 停止并导出（${((now() - (aeRec.rec.t0 || now())) / 1000).toFixed(1)}s）` : '● 开始记录'; b.classList.toggle('on', aeActive()); }
+const PANEL_ACTIONS = { aeToggle: () => { if (aeActive()) { recClosed = true; updateAEButtons(); return doExportAE(); } recStart(); }, aeExport: () => doExportAE(), export3d: () => doExport3D() };
+function recTailDone(t) { return finishedAt && t - finishedAt > (S.endCard ? S.endDelay + 400 : 0) + Math.max(800, S.tailSec * 1000); }
 function download(blob, name) { const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; a.textContent = `⬇ ${name} (${(blob.size / 1e6).toFixed(1)}MB)`; document.getElementById('recList').prepend(a); a.click(); }
 async function doExportAE(save = true) {
   status('正在生成 AE 工程…'); const r = await aeRec.exportZip(); window.__aeLast = r;
   if (save) download(r.blob, r.name); status(`AE 工程：${r.stats.layers} 图层，${r.stats.keys} 关键帧`); return r;
 }
 async function doExport3D(save = true) {
-  status('正在生成 3D 动画…'); const ae = await aeRec.exportZip();
+  // 与麻将工具一致：3D 导出复用 AE 记录，按 3D 帧率逐帧烘焙、英文命名、同画布尺寸、混合+逐事件音频
+  status('正在生成 3D 动画…'); const ae = await aeRec.exportZip(undefined, { aeFps: String(+S.export3dFps || 30), aeSize: 'canvas', aeSampling: 'bake', aeNames: 'en', aeAudio: 'both' });
   const r = await export3D({ S, ae, env: { L, view: view(), sprites, bgCanvas, baseCanvas, handImg: hand.img, rec: aeRec.rec }, drawTextsTo: (g) => withCtx(g, drawTexts), drawEndTo: (g, p, nd) => withCtx(g, () => drawEnd(0, p, nd)) });
   window.__e3dLast = r; if (save) download(r.blob, r.name); status(`3D 动画：${r.stats.plates} 板，${r.stats.screws} 螺丝，${r.duration.toFixed(2)}s`); return r;
 }
-document.getElementById('btnAE').onclick = () => doExportAE().catch(e => { status('导出失败：' + e.message); console.error(e); });
-document.getElementById('btn3D').onclick = () => doExport3D().catch(e => { status('导出失败：' + e.message); console.error(e); });
 
 // ---------- 主循环 ----------
 let lastT = now();
 function loop(t) {
   const dt = Math.min(0.05, (t - lastT) / 1000); lastT = t;
   step(t, dt); updPress(t); draw(t);
-  if (aeRec.rec && !recClosed) { if (recTailDone(t)) recClosed = true; else aeRec.sample(t); }
+  if (aeRec.rec && !recClosed) { if (recTailDone(t)) { recClosed = true; updateAEButtons(); } else aeRec.sample(t); if ((t | 0) % 10 === 0) updateAEButtons(); }
   if (rec) document.getElementById('recInfo').textContent = `录制中 ${((t - recT0) / 1000).toFixed(1)}s`; else document.getElementById('recInfo').textContent = '';
   requestAnimationFrame(loop);
 }
@@ -344,10 +351,10 @@ function applyChange(k) {
   if (k === 'shapeImg' && S.shapeImg) S.level = 'image';
   saveSettings(S);
   if (NEWGAME_KEYS.test(k)) newGame(); else if (REBUILD_KEYS.test(k)) rebuild();
-  if (k === 'handImg') loadHand();
+  if (k === 'handImage') loadHand();
   if (k === 'bgm' || k === 'bgmVol') { if (k === 'bgm') sfx.setBgm(S.bgm, S.bgmVol); else if (sfx.bgmGain) sfx.bgmGain.gain.value = S.bgmVol; }
 }
-function loadHand() { if (!S.handImg) { hand.img = null; return; } const im = new Image(); im.onload = () => hand.img = im; im.src = S.handImg; }
+function loadHand() { if (!S.handImage) { hand.img = null; return; } const im = new Image(); im.onload = () => hand.img = im; im.src = S.handImage; }
 function buildPanel() {
   const body = document.getElementById('panelBody'); body.innerHTML = '';
   GROUPS.forEach(([title, items], gi) => {
@@ -364,6 +371,7 @@ function buildPanel() {
       else if (type === 'bool') { row.classList.add('t-switch'); const l = document.createElement('label'); l.className = 'switch'; l.innerHTML = `<input type="checkbox" class="switch-input" ${S[k] ? 'checked' : ''}><span class="slider"></span>`; l.querySelector('input').onchange = (e) => { S[k] = e.target.checked; applyChange(k); }; row.append(l); }
       else if (type === 'select') { const s = document.createElement('select'); a.forEach(([v, t]) => { const o = document.createElement('option'); o.value = v; o.textContent = t; s.append(o); }); s.value = S[k]; s.onchange = () => { S[k] = s.value; applyChange(k); }; row.append(s); }
       else if (type === 'text') { const t = document.createElement('input'); t.type = 'text'; t.value = S[k]; t.oninput = () => { S[k] = t.value; applyChange(k); }; row.append(t); }
+      else if (type === 'button') { row.classList.add('t-btn'); const bt = document.createElement('button'); bt.id = 'btn' + k; bt.textContent = a; bt.onclick = () => Promise.resolve(PANEL_ACTIONS[def] && PANEL_ACTIONS[def]()).catch(e => { status('导出失败：' + e.message); console.error(e); }); row.append(bt); }
       else if (type === 'file') {
         const f = document.createElement('input'); f.type = 'file'; f.accept = k === 'bgm' ? 'audio/*' : 'image/png,image/*'; f.id = 'file_' + k;
         f.onchange = () => { const file = f.files[0]; if (!file) return; const fr = new FileReader(); fr.onload = () => { S[k] = fr.result; applyChange(k); }; fr.readAsDataURL(file); };

@@ -7,7 +7,7 @@ const b = await chromium.launch({ executablePath: '/usr/bin/google-chrome', head
 const p = await b.newPage({ viewport: { width: 1400, height: 1000 } });
 const errs = []; p.on('pageerror', e => errs.push(String(e))); p.on('console', m => m.type() === 'error' && errs.push(m.text()));
 await p.goto('file://' + process.cwd() + '/index.html'); await p.waitForTimeout(400);
-if (fs.existsSync('test/assets/stylus.png')) await p.setInputFiles('#file_handImg', 'test/assets/stylus.png');
+if (fs.existsSync('test/assets/stylus.png')) await p.setInputFiles('#file_handImage', 'test/assets/stylus.png');
 await p.evaluate(() => { __game.set('handAnchorX', 0.04); __game.set('handAnchorY', 0.03); __game.set('endCard', true); __game.set('discShow', true); __game.set('autoSpeed', 1.6); window.__aeSnapEvery = +(new URLSearchParams('').get('x') || 0); });
 await p.evaluate(n => { window.__aeSnapEvery = n; __game.autoSolve(); __game.aeRec.rec.snapEvery = n; __game.aeRec.rec.maxSnaps = 60; }, +(process.env.SNAP_EVERY || 45));
 const t0 = Date.now();

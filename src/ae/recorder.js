@@ -34,9 +34,9 @@ export function createAERecorder(api) {
     R.lastT = t; R.frames++;
   }
 
-  async function exportZip(rec = R) {
+  async function exportZip(rec = R, So = null) {
     if (!rec || rec.frames < 2) throw new Error('没有可导出的记录：请先自动通关或手动游玩');
-    const E = api.env(), S = rec.S, L = rec.L, v = rec.view;
+    const E = api.env(), S = So ? { ...rec.S, ...So } : rec.S, L = rec.L, v = rec.view;
     const fps = +S.aeFps || 30, bake = S.aeSampling === 'bake';
     const CW = 720, CH = 1280;
     const D = Math.max(1 / fps, Math.ceil((rec.lastT + 1 / fps) * fps - 1e-6) / fps);
@@ -169,17 +169,17 @@ export function createAERecorder(api) {
       layers.push(Ly(nm + ' 螺帽', { asset: A.head.id }, { ...base, markers: [[r4(tin), '拧出']], tr: { anchor: [A.head.ax, A.head.ay], position: prop(fr, head, TOL.pos), scale: prop(fr, e => [WS * e[6], WS * e[6]], TOL.scale) } }));
       layers.push(Ly(nm + ' 十字槽', { asset: A.cross.id }, { ...base, tr: { anchor: [A.cross.ax, A.cross.ay], position: prop(fr, head, TOL.pos), scale: prop(fr, e => [WS * e[6], WS * e[6]], TOL.scale), rotation: prop(fr, e => e[4] * 180 / Math.PI, TOL.rot) } }));
     }
-    if (A.text) layers.push(Ly('免责声明文字', { asset: A.text.id }, { label: LABEL.ui, tr: { anchor: [0, 0], position: [0, 0], scale: [DS, DS] } }));
+    if (A.text) layers.push(Ly('免责声明', { asset: A.text.id }, { label: LABEL.ui, tr: { anchor: [0, 0], position: [0, 0], scale: [DS, DS] } }));
     if (A.end) {
       const k = rec.end.findIndex(e => e[1] > 0), seg = rec.end.slice(Math.max(0, k - 1)), fr = frames(seg);
-      layers.push(Ly('结束卡', { asset: A.end.id }, { in: FR(seg[0][0]), label: LABEL.end, markers: [[r4(FR(seg[0][0])), '结束卡']], tr: { anchor: [0, 0], position: [0, 0], scale: [DS, DS], opacity: prop(fr, e => e[1] * 100, TOL.op) } }));
+      layers.push(Ly('结束页', { asset: A.end.id }, { in: FR(seg[0][0]), label: LABEL.end, markers: [[r4(FR(seg[0][0])), '结束页']], tr: { anchor: [0, 0], position: [0, 0], scale: [DS, DS], opacity: prop(fr, e => e[1] * 100, TOL.op) } }));
     }
     if (A.hand) {
       const s = rec.hand, k0 = s.findIndex(e => e[4]); let k1 = s.length - 1; while (k1 > k0 && !s[k1][4]) k1--;
       const seg = s.slice(k0, Math.min(s.length, k1 + 2)).map((e, i, arr) => e[4] ? e : [e[0], ...arr[i - 1].slice(1, 4), 0]);
       const fr = frames(seg.length > 1 ? seg : [seg[0], [seg[0][0] + 1 / fps, ...seg[0].slice(1)]]);
       const aw = E.handImg.width, ah = E.handImg.height;
-      layers.push(Ly('手指/触控笔', { asset: A.hand.id }, { in: FR(s[k0][0]), out: Math.min(D, Math.max(FR(s[k0][0]) + 1 / fps, FR(tEnd(s, k1)))), label: LABEL.hand, tr: { anchor: [S.handAnchorX * aw, S.handAnchorY * ah], position: prop(fr, e => [e[1], e[2]], TOL.pos), scale: prop(fr, e => [e[3] * 100, e[3] * 100], TOL.scale), opacity: prop(fr, e => e[4] ? 100 : 0, 0, true) } }));
+      layers.push(Ly('手指', { asset: A.hand.id }, { in: FR(s[k0][0]), out: Math.min(D, Math.max(FR(s[k0][0]) + 1 / fps, FR(tEnd(s, k1)))), label: LABEL.hand, tr: { anchor: [S.handAnchorX * aw, S.handAnchorY * ah], position: prop(fr, e => [e[1], e[2]], TOL.pos), scale: prop(fr, e => [e[3] * 100, e[3] * 100], TOL.scale), opacity: prop(fr, e => e[4] ? 100 : 0, 0, true) } }));
     }
     // 音频
     const audioFiles = [];
@@ -187,7 +187,7 @@ export function createAERecorder(api) {
       try {
         if (S.aeAudio === 'both' || S.aeAudio === 'mixed') {
           const buf = await renderSfxOffline(rec.sfx, D, S);
-          if (buf) { audioFiles.push({ name: 'audio/mix.wav', data: encodeWav(buf) }); assets.push({ id: 'mix', file: 'audio/mix.wav', folder: 'aud', name: 'mix.wav' }); layers.push(Ly('混合音轨（默认静音，与逐事件二选一）', { asset: 'mix' }, { label: LABEL.audio, audioEnabled: S.aeAudio === 'mixed' })); }
+          if (buf) { audioFiles.push({ name: 'audio/mix.wav', data: encodeWav(buf) }); assets.push({ id: 'mix', file: 'audio/mix.wav', folder: 'aud', name: 'mix.wav' }); layers.push(Ly('混合音轨', { asset: 'mix' }, { label: LABEL.audio })); }
         }
         if (S.aeAudio === 'both' || S.aeAudio === 'events') {
           const kinds = new Map(); rec.sfx.forEach(e => { const k = e.name + (e.dur ? '_' + Math.round(e.dur * 1000) : ''); if (!kinds.has(k)) kinds.set(k, e); e.k = k; });
@@ -198,15 +198,34 @@ export function createAERecorder(api) {
         }
       } catch (e) { console.warn('audio export', e); }
     }
-    for (const e of rec.sfx) if (e.name === 'fall') markers.push([r4(e.t), '板掉落']);
+    // 与麻将工具一致：每个音效事件在主合成上一个标记
+    for (const e of rec.sfx) markers.push([r4(e.t), SFX_ZH[e.name] || e.name]);
     const d = new Date(), p2 = x => String(x).padStart(2, '0');
     const stamp = `${d.getFullYear()}${p2(d.getMonth() + 1)}${p2(d.getDate())}_${p2(d.getHours())}${p2(d.getMinutes())}${p2(d.getSeconds())}`;
     comps.push({ id: 'main', name: '主合成_打螺丝', w: CW, h: CH, duration: D, fps, folder: 'root', bg: [0, 0, 0], layers, markers });
+    // ---- 与麻将工具一致：aeSize（合成尺寸，整体缩放 K）与 aeNames（中文/English 图层命名）后处理 ----
+    const [CW2, CH2] = S.aeSize && S.aeSize !== 'canvas' ? S.aeSize.split('x').map(Number) : [E.canvas.width, E.canvas.height];
+    const K = Math.round(CW2 / CW * 1e6) / 1e6;
+    const zh = S.aeNames !== 'en';
+    if (K !== 1) {
+      const mul = (P, f) => P == null ? P : Array.isArray(P) ? P.map(x => x * f) : P.t ? { ...P, v: P.v.map(x => Array.isArray(x) ? x.map(y => y * f) : x * f) } : P;
+      for (const c of comps) { c.w = CW2; c.h = CH2; for (const l of c.layers) if (l.tr) { l.tr.position = mul(l.tr.position, K); l.tr.scale = mul(l.tr.scale, K); } }
+    }
+    if (!zh) {
+      const T = [['主合成_打螺丝', 'Main_Screw'], ['打螺丝_AE工程', 'Screw_AE'], ['音效_逐事件', 'SFX events'], ['混合音轨', 'Mixed audio'], ['手形底板', 'Hand base'], ['免责声明', 'Disclaimer'], ['结束页', 'End card'],
+        ['拧出棘轮', 'ratchet up'], ['拧入棘轮', 'ratchet down'], ['拧紧到位', 'thunk'], ['板掉落', 'plate fall'], ['开始下落', 'fall start'], ['十字槽', 'cross'], ['移动#', 'move #'], ['预合成', 'Precomps'],
+        ['背景', 'Background'], ['板块', 'Plate'], ['螺丝', 'Screw'], ['螺帽', 'head'], ['螺杆', 'shank'], ['投影', 'shadow'], ['下落', 'fall'], ['掉落', 'fall'], ['拧出', 'unscrew'], ['露出', 'reveal'],
+        ['手指', 'Hand'], ['音效', 'SFX'], ['素材', 'Assets'], ['界面', 'UI'], ['音频', 'Audio'], ['孔', 'Hole']];
+      const tr = x => { if (typeof x !== 'string') return x; for (const [a, b] of T) x = x.split(a).join(b); return x; };
+      for (const c of comps) { c.name = tr(c.name); if (c.markers) c.markers = c.markers.map(([t, m]) => [t, tr(m)]); for (const l of c.layers) { l.name = tr(l.name); if (l.markers) l.markers = l.markers.map(([t, m]) => [t, tr(m)]); } }
+      for (const f of folders) f.name = tr(f.name);
+      for (const x of assets) x.name = tr(x.name).replace(/_/g, '_');
+    }
     const stats = { comps: comps.length, layers: 0, keys: 0, perComp: {}, plates: L.plates.length, screws: L.screws.length, holes: L.holes.length, moves: nMove, sfx: rec.sfx.length };
     for (const c of comps) { stats.perComp[c.id] = c.layers.length; stats.layers += c.layers.length; for (const l of c.layers) if (l.tr) for (const k of ['position', 'scale', 'rotation', 'opacity']) { const kc = keyCount(l.tr[k]); if (kc > 1) stats.keys += kc; } }
     const timeline = {
-      meta: { tool: 'screw-tool', format: 1, created: d.toISOString(), fps, width: CW, height: CH, duration: D, canvas: [E.canvas.width, E.canvas.height], sampling: bake ? 'bake' : 'reduce', screwBlock: !!S.screwBlock,
-        saveAep: true, aepName: `screw_${stamp}.aep`, newProject: true, stats, note: '图层从下到上排列；时间单位秒；位置/锚点单位像素（合成坐标 720×1280）；缩放为百分比' },
+      meta: { tool: 'screw-tool', format: 1, created: d.toISOString(), fps, width: CW2, height: CH2, duration: D, canvas: [E.canvas.width, E.canvas.height], sampling: bake ? 'bake' : 'reduce', screwBlock: !!S.screwBlock,
+        scale: K, names: zh ? 'zh' : 'en', saveAep: S.aeSaveAep !== false, aepName: `screw_${stamp}.aep`, newProject: true, stats, note: '图层从下到上排列；时间单位秒；位置/锚点单位像素（合成坐标）；缩放为百分比' },
       folders, assets: assets.map(({ id, file, folder, w, h, name }) => ({ id, file, folder, w, h, name })), comps, mainComp: 'main',
     };
     await Promise.all(pending);

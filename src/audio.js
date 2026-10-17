@@ -27,26 +27,26 @@ export class Sfx {
   }
   // 棘轮：dur 秒内以 rate 次/秒咔哒
   ratchet(dur, S, up = true) {
-    if (!S.sfx || !this.ensure()) return; const c = this.ctx, t0 = this.now(); this.emit(up ? 'ratchet_up' : 'ratchet_down', { dur });
+    if (S.sfxMute || !this.ensure()) return; const c = this.ctx, t0 = this.now(); this.emit(up ? 'ratchet_up' : 'ratchet_down', { dur });
     const n = Math.max(2, Math.round(dur * S.ratchetRate));
-    for (let i = 0; i < n; i++) { const k = i / n; this.click(t0 + k * dur + Math.random() * 0.004, S.sfxVol * (0.5 + 0.5 * Math.random()) * (up ? 1 - k * 0.4 : 0.6 + k * 0.4), S.ratchetPitch * (up ? 1 + k * 0.15 : 1.1 - k * 0.15)); }
+    for (let i = 0; i < n; i++) { const k = i / n; this.click(t0 + k * dur + Math.random() * 0.004, S.sfxVolume * (0.5 + 0.5 * Math.random()) * (up ? 1 - k * 0.4 : 0.6 + k * 0.4), S.ratchetPitch * (up ? 1 + k * 0.15 : 1.1 - k * 0.15)); }
   }
   thunk(S) { // 拧紧到位
-    if (!S.sfx || !this.ensure()) return; const c = this.ctx, t = this.now(); this.emit('thunk');
+    if (S.sfxMute || !this.ensure()) return; const c = this.ctx, t = this.now(); this.emit('thunk');
     const o = c.createOscillator(), g = c.createGain(); o.type = 'triangle'; o.frequency.setValueAtTime(420 * S.ratchetPitch, t); o.frequency.exponentialRampToValueAtTime(160, t + 0.06);
-    g.gain.setValueAtTime(S.sfxVol * 0.5, t); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.09); o.connect(g); g.connect(this.master); o.start(t); o.stop(t + 0.1);
-    this.click(t, S.sfxVol, S.ratchetPitch * 0.8);
+    g.gain.setValueAtTime(S.sfxVolume * 0.5, t); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.09); o.connect(g); g.connect(this.master); o.start(t); o.stop(t + 0.1);
+    this.click(t, S.sfxVolume, S.ratchetPitch * 0.8);
   }
-  pop(S) { this.click(this.ensure() && this.ctx.currentTime, S.sfx ? S.sfxVol * 0.7 : 0, 1.4); }
+  pop(S) { this.click(this.ensure() && this.ctx.currentTime, !S.sfxMute ? S.sfxVolumeume * 0.7 : 0, 1.4); }
   fall(S) {
-    if (!S.sfx || !S.fallSfx || !this.ensure()) return; const c = this.ctx, t = this.now(); this.emit('fall');
+    if (S.sfxMute || !S.fallSfx || !this.ensure()) return; const c = this.ctx, t = this.now(); this.emit('fall');
     const s = c.createBufferSource(); const len = c.sampleRate * 0.5, b = c.createBuffer(1, len, c.sampleRate), d = b.getChannelData(0);
     for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.sin(Math.PI * i / len);
     s.buffer = b; const f = c.createBiquadFilter(); f.type = 'bandpass'; f.frequency.setValueAtTime(900, t); f.frequency.exponentialRampToValueAtTime(250, t + 0.45);
-    const g = c.createGain(); g.gain.value = S.sfxVol * 0.35; s.connect(f); f.connect(g); g.connect(this.master); s.start(t);
+    const g = c.createGain(); g.gain.value = S.sfxVolume * 0.35; s.connect(f); f.connect(g); g.connect(this.master); s.start(t);
     // 木板轻碰
     const o = c.createOscillator(), og = c.createGain(); o.type = 'sine'; o.frequency.setValueAtTime(260, t); o.frequency.exponentialRampToValueAtTime(90, t + 0.12);
-    og.gain.setValueAtTime(S.sfxVol * 0.4, t); og.gain.exponentialRampToValueAtTime(0.0001, t + 0.15); o.connect(og); og.connect(this.master); o.start(t); o.stop(t + 0.16);
+    og.gain.setValueAtTime(S.sfxVolume * 0.4, t); og.gain.exponentialRampToValueAtTime(0.0001, t + 0.15); o.connect(og); og.connect(this.master); o.start(t); o.stop(t + 0.16);
   }
   setBgm(url, vol) {
     if (!this.ensure()) return;

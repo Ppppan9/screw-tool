@@ -14,7 +14,7 @@ for (const [n, opt] of cases) {
   await p.waitForTimeout(500);
   const info = await p.evaluate(() => ({ name: __game.L.name, plates: __game.L.plates.length, screws: __game.L.screws.length, holes: __game.L.holes.length, inner: (__game.L.base.inner || []).length, outer: __game.L.base.polys.length, layers: Math.max(...__game.L.plates.map(q => q.layer)) + 1, attempts: __game.L.attempts }));
   fs.writeFileSync(`/tmp/shape_${n}.png`, Buffer.from((await p.evaluate(() => stage.toDataURL())).split(',')[1], 'base64'));
-  await p.evaluate(() => { window.__finished = false; Object.assign(__game.S, { autoSpeed: 4, autoStepMin: 0, autoStepMax: 20, autoMoveDur: 60, autoSelectGap: 0, autoStartDelay: 0, liftDur: 40, flyDur: 80, screwInDur: 40, fallDelay: 0 }); __game.autoSolve(); });
+  await p.evaluate(() => { window.__finished = false; Object.assign(__game.S, { autoSpeed: 4, delayMin: 0, delayMax: 20, moveMin: 60, moveMax: 60, autoSelectGap: 0, autoStartDelay: 0, liftDur: 40, flyDur: 80, screwInDur: 40, fallDelay: 0 }); __game.autoSolve(); });
   const t0 = Date.now(); while (!(await p.evaluate(() => window.__finished)) && Date.now() - t0 < 300000) { await p.waitForTimeout(200); }
   const st = await p.evaluate(() => ({ removed: __game.st.removed.size, plates: __game.L.plates.length }));
   info.solved = st.removed === st.plates; info.ms = Date.now() - t0; if (!info.solved || info.name !== 'image') fail++;

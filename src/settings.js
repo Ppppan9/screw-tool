@@ -1,5 +1,5 @@
 // 设置定义：所有可调参数。版本号 + 迁移。
-export const SETTINGS_VERSION = 6;
+export const SETTINGS_VERSION = 7;
 export const STORE_KEY = 'screwTool.settings';
 // [key, 标签, 类型, 默认, min, max, step]  类型: range/color/bool/select/text/file
 export const GROUPS = [
@@ -103,35 +103,6 @@ export const GROUPS = [
     ['fallSpin', '下落旋转(度/秒，参考=0)', 'range', 0, -360, 360, 5],
     ['fallFade', '下落时淡出', 'bool', false],
   ]],
-  ['点击与自动通关', [
-    ['tapFx', '点击按压反馈', 'bool', true],
-    ['tapRipple', '点击波纹', 'bool', false],
-    ['autoStepMin', '自动：步间隔最小(ms)', 'range', 150, 0, 3000, 10],
-    ['autoStepMax', '自动：步间隔最大(ms)', 'range', 350, 0, 4000, 10],
-    ['autoSelectGap', '自动：点螺丝→点孔间隔(ms)', 'range', 120, 0, 2000, 10],
-    ['autoMoveDur', '自动：手指移动时长(ms)', 'range', 260, 60, 2000, 10],
-    ['autoJitter', '自动：点击位置抖动(px)', 'range', 4, 0, 20, 1],
-    ['autoSpeed', '自动：整体速度倍率', 'range', 1, 0.25, 4, 0.05],
-    ['autoStartDelay', '自动：开始前等待(ms)', 'range', 500, 0, 5000, 50],
-  ]],
-  ['手指/触控笔光标', [
-    ['handShow', '显示手指图片', 'bool', true],
-    ['handImg', '上传手指PNG', 'file', ''],
-    ['handAnchorX', '指尖锚点X(0~1)', 'range', 0.05, 0, 1, 0.01],
-    ['handAnchorY', '指尖锚点Y(0~1)', 'range', 0.05, 0, 1, 0.01],
-    ['handScale', '手指缩放', 'range', 1, 0.1, 3, 0.01],
-    ['handRest', '空闲位置', 'select', 'br', [['br', '右下角外'], ['hide', '隐藏']]],
-    ['handPress', '按下缩放', 'range', 0.93, 0.7, 1, 0.01],
-  ]],
-  ['声音', [
-    ['sfx', '音效', 'bool', true],
-    ['sfxVol', '音效音量', 'range', 0.8, 0, 1, 0.01],
-    ['ratchetRate', '棘轮咔哒频率(次/秒)', 'range', 45, 5, 120, 1],
-    ['ratchetPitch', '棘轮音高', 'range', 1, 0.5, 2, 0.05],
-    ['fallSfx', '板掉落音效', 'bool', true],
-    ['bgm', '上传背景音乐(可选)', 'file', ''],
-    ['bgmVol', '背景音乐音量', 'range', 0.5, 0, 1, 0.01],
-  ]],
   ['文字', [
     ['discShow', '显示底部免责声明', 'bool', false],
     ['discText', '底部文字', 'text', '广告素材宣传场景须达到一定条件，触发相关支线玩法'],
@@ -142,27 +113,71 @@ export const GROUPS = [
     ['vertSize', '竖排字号', 'range', 20, 10, 40, 1],
     ['textOpacity', '文字透明度', 'range', 0.85, 0, 1, 0.01],
   ]],
-  ['导出 AE / 3D', [
-    ['aeFps', 'AE 导出帧率', 'select', '30', [['24', '24'], ['25', '25'], ['30', '30'], ['60', '60']]],
-    ['aeSampling', 'AE 关键帧', 'select', 'reduce', [['reduce', '精简（线性插值误差内删减）'], ['bake', '逐帧烘焙']]],
-    ['aeAudio', 'AE 音频', 'select', 'both', [['both', '逐事件 + 混合音轨'], ['events', '仅逐事件'], ['mixed', '仅混合音轨'], ['none', '不导出']]],
-    ['export3dFps', '3D 导出帧率', 'select', '30', [['24', '24'], ['25', '25'], ['30', '30'], ['60', '60']]],
-    ['export3dScrew', '3D 螺丝形式', 'select', 'mesh', [['mesh', '3D 网格（十字槽螺帽+螺杆）'], ['quad', '贴图四边形']]],
-    ['export3dHand', '3D 导出包含手指', 'bool', true],
+  // ---- 以下分组与麻将工具统一（键名/中文标签/顺序见 ref/TOOLKIT_STANDARD.md），打螺丝专有项放在各组末尾 ----
+  ['音效', [
+    ['sfxMute', '静音', 'bool', false],
+    ['sfxVolume', '总音量', 'range', 0.8, 0, 1.5, 0.01],
+    ['ratchetRate', '棘轮咔哒频率(次/秒)', 'range', 45, 5, 120, 1],
+    ['ratchetPitch', '棘轮音高', 'range', 1, 0.5, 2, 0.05],
+    ['fallSfx', '板掉落音效', 'bool', true],
+    ['bgm', '上传背景音乐(可选)', 'file', ''],
+    ['bgmVol', '背景音乐音量', 'range', 0.5, 0, 1, 0.01],
   ]],
-  ['结束卡 & 录制', [
-    ['endCard', '通关后显示结束卡', 'bool', false],
-    ['endText', '结束卡文字', 'text', '立即下载 挑战更多关卡'],
-    ['endDelay', '结束卡延迟(ms)', 'range', 600, 0, 5000, 50],
-    ['autoRec', '自动通关时自动录制', 'bool', false],
-    ['recFormat', '录制格式', 'select', 'auto', [['auto', '自动(优先MP4)'], ['mp4', 'MP4'], ['webm', 'WebM']]],
-    ['recBitrate', '码率(Mbps)', 'range', 8, 1, 30, 1],
+  ['手指 / 自动通关', [
+    ['autoSpeed', '整体速度倍率', 'range', 1, 0.25, 6, 0.05],
+    ['moveMin', '移动耗时最小(ms)', 'range', 220, 50, 2000, 10],
+    ['moveMax', '移动耗时最大(ms)', 'range', 300, 50, 3000, 10],
+    ['delayMin', '点击间隔最小(ms)', 'range', 150, 0, 2000, 10],
+    ['delayMax', '点击间隔最大(ms)', 'range', 350, 0, 4000, 10],
+    ['thinkChance', '“思考停顿”概率', 'range', 0, 0, 0.6, 0.01],
+    ['thinkMax', '思考停顿最长(ms)', 'range', 900, 0, 4000, 50],
+    ['jitter', '落点随机抖动(px)', 'range', 4, 0, 40, 1],
+    ['handSize', '手指大小(画面宽比例)', 'range', 0.42, 0.1, 0.9, 0.01],
+    ['handAnchorX', '指尖锚点 X(0~1)', 'range', 0.05, 0, 1, 0.005],
+    ['handAnchorY', '指尖锚点 Y(0~1)', 'range', 0.05, 0, 1, 0.005],
+    ['handImage', '上传手指图片(透明PNG，不上传则不显示手指)', 'file', ''],
+    ['pressEnabled', '点击按下效果（手指按压）', 'bool', true],
+    ['pressDepth', '按压幅度', 'range', 0.07, 0, 0.3, 0.01],
+    ['tapRipple', '点击处显示波纹圈（参考视频没有）', 'bool', false],
+    ['handShow', '显示手指图片', 'bool', true],
+    ['handRest', '空闲位置', 'select', 'br', [['br', '右下角外'], ['hide', '隐藏']]],
+    ['autoSelectGap', '点螺丝→点孔间隔(ms)', 'range', 120, 0, 2000, 10],
+    ['autoStartDelay', '开始前等待(ms)', 'range', 500, 0, 5000, 50],
+  ]],
+  ['录制', [
     ['recFps', '帧率', 'range', 30, 15, 60, 1],
-    ['recTail', '通关后继续录制(ms)', 'range', 1200, 0, 8000, 100],
+    ['recFormat', '格式', 'select', 'auto', [['auto', '自动(优先 MP4)'], ['mp4', 'MP4'], ['webm', 'WebM']]],
+    ['recBitrate', '码率(Mbps)', 'range', 8, 1, 30, 0.5],
+    ['autoRec', '自动通关开始时自动录制（默认关）', 'bool', false],
+    ['autoStop', '自动通关通关后停止录制并下载（仅在正在录制时）', 'bool', true],
+    ['tailSec', '通关后继续录制(秒)', 'range', 1.2, 0, 10, 0.1],
+  ]],
+  ['导出 AE 工程', [
+    ['_aeToggle', '记录 AE 时间轴（自动通关/手动游玩都可）', 'button', 'aeToggle', '● 开始记录'],
+    ['_aeExport', '重新导出上一次记录', 'button', 'aeExport', '⬇ 导出 ZIP'],
+    ['aeWithRec', '录制视频时同步记录，停止录制后自动导出', 'bool', true],
+    ['aeFps', 'AE 合成帧率', 'select', '30', [['24', '24'], ['25', '25'], ['30', '30'], ['60', '60']]],
+    ['aeSize', 'AE 合成尺寸', 'select', 'canvas', [['canvas', '同画布分辨率'], ['720x1280', '720×1280'], ['1080x1920', '1080×1920']]],
+    ['aeSampling', '关键帧方式', 'select', 'reduce', [['reduce', '精简关键帧（线性插值，误差 <0.3px）'], ['bake', '逐帧烘焙（每帧一个关键帧）']]],
+    ['aeNames', '图层命名', 'select', 'zh', [['zh', '中文'], ['en', 'English']]],
+    ['aeAudio', '音频', 'select', 'both', [['both', '混合音轨 + 逐事件音效层'], ['mixed', '仅混合音轨'], ['events', '仅逐事件音效层'], ['none', '不导出音频']]],
+    ['aeSaveAep', '脚本跑完后提示另存为 .aep', 'bool', true],
+  ]],
+  ['导出 3D 动画（UE5 / C4D / Blender）', [
+    ['_export3d', '用上一次 AE 记录生成 glTF 场景 + Blender 脚本 + 音频', 'button', 'export3d', '导出 3D 动画 (glTF/FBX/Blender)'],
+    ['export3dFps', '3D 动画帧率', 'select', '30', [['24', '24'], ['25', '25'], ['30', '30'], ['60', '60']]],
+    ['export3dHand', '包含手指（贴图平面；结束页是否显示仍按“结束页显示手指”）', 'bool', true],
+    ['export3dScrew', '螺丝形式', 'select', 'mesh', [['mesh', '3D 网格（十字槽螺帽+螺杆）'], ['quad', '贴图四边形']]],
+  ]],
+  ['结束页(End Card)', [
+    ['endCard', '显示结束页', 'bool', false],
+    ['endCardHand', '结束页显示手指（自动通关点按钮）', 'bool', false],
+    ['endDelay', '通关后出现延迟(ms)', 'range', 600, 0, 5000, 50],
+    ['endTitle', '标题', 'text', '立即下载 挑战更多关卡'],
   ]],
 ];
 export const DEFS = {};
-for (const [, items] of GROUPS) for (const it of items) DEFS[it[0]] = it[3];
+for (const [, items] of GROUPS) for (const it of items) if (it[2] !== 'button') DEFS[it[0]] = it[3];
 export function migrate(obj) {
   if (!obj || typeof obj !== 'object') return { ...DEFS };
   let v = obj.version || 0, s = { ...(obj.settings || obj) };
@@ -178,6 +193,18 @@ export function migrate(obj) {
   if (v < 5) v = 5;
   // v5 -> v6（M-C 材质对齐参考帧实测）：仍等于旧默认值的视觉参数替换为新默认；新增参数只补默认
   if (v < 6) { const OLD = { baseColor: '#bd8784', baseGrain: 0.18, baseOutline: '#4a2626', plateColor: '#c9c1ee', plateShade: '#7b70ad', plateThick: 3, plateGrain: 0.28, plateOutline: '#352840', outlineW: 2.6, plateShadow: 0.25, screwSize: 42, screwColor: '#dcd8fb', screwDark: '#6d6890', screwCross: '#3c3a4c', holeColor: '#26150f' }; for (const k in OLD) if (s[k] === OLD[k]) delete s[k]; v = 6; }
+  // v6 -> v7（v1.3.1 与麻将工具统一通用参数键名）：旧键 → 新键（有值才迁移，单位换算），其它只补默认
+  if (v < 7) {
+    const mv = (o, n, f = x => x) => { if (o in s) { if (!(n in s)) s[n] = f(s[o]); delete s[o]; } };
+    mv('autoStepMin', 'delayMin'); mv('autoStepMax', 'delayMax'); mv('autoJitter', 'jitter');
+    if ('autoMoveDur' in s) { if (!('moveMin' in s)) s.moveMin = Math.round(s.autoMoveDur * 0.85); if (!('moveMax' in s)) s.moveMax = Math.round(s.autoMoveDur * 1.15); delete s.autoMoveDur; }
+    mv('handImg', 'handImage'); mv('handScale', 'handSize', x => Math.round(x * 0.42 * 1000) / 1000); // 旧：图片原尺寸倍率（按 300px 宽手图换算为画面宽比例）
+    mv('handPress', 'pressDepth', x => Math.round((1 - x) * 1000) / 1000); mv('tapFx', 'pressEnabled');
+    mv('sfx', 'sfxMute', x => !x); mv('sfxVol', 'sfxVolume');
+    mv('recTail', 'tailSec', x => Math.round(x / 100) / 10); mv('endText', 'endTitle');
+    if ('recBitrate' in s && typeof s.recBitrate !== 'number') delete s.recBitrate;
+    v = 7;
+  }
   const out = { ...DEFS };
   for (const k in DEFS) if (k in s && typeof s[k] === typeof DEFS[k]) out[k] = s[k];
   return out;
