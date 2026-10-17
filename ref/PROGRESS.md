@@ -22,8 +22,9 @@
 - 底板离屏画布分辨率乘以 devicePixelRatio（上限 3）；3D 导出挤出用同一平滑多边形，AE 底板 PNG 来自同一画布。
 - 对比：screenshots/base_edge_before_after.jpg。设置版本 4（迁移不改值）。
 
-## v1.3 M-B（进行中）导入透明图形生成关卡
+## v1.3 M-B（完成，可用）导入透明图形生成关卡
 - src/shapegen.js：alpha→marching squares 平滑底板（多块+内孔，evenodd 绘制，3D 挤出带孔）；切分 strip/voronoi/grid → 连通分量 → 小碎片合并 → 距离场等值线得到带细缝的板；螺丝按内切距离布置；去掉小板留出可见空孔；隐藏底孔；solve() 验证，失败换种子（14 次）后回退参考关卡。
 - 设置 v5（只补默认）；按钮“🧩 重新生成图形关卡”；底板填充可用图片像素；板块可按图片颜色混合。
 - 测试 test/shape-test.mjs + test/assets/shapes/{heart,star_hole,cat}.png → screenshots/import_shape_samples.jpg。
-- 已知问题（待修）：shape-test 中自动通关 120s 内未结束（含回退的参考关卡，疑似测试脚本驱动问题）；cat 样例 14 次种子均不可解→回退。
+- shape-test 结果：heart 25 板/1 次尝试、star_hole 8 板(Voronoi,带内孔)/7 次、cat 19 板 2 层(图片纹理底板+图片着色)/18 次，三者自动通关完成。种子重试 24 次，每 4 次失败多加 1 个空孔。
+- 剩余：M-C 材质对照未做；AE/3D 导出对图形关卡未单独跑自动测试（代码路径相同，3D 底板支持内孔）。
