@@ -112,3 +112,4 @@
   - test:autoall 6/6 通过（含 reference{theme:classic}：21 板 36 步 78.7s；abort/nudge/ghost/mispredict 均 0）。下一步 npm test → test:ae → test:3d → test:norec → test:collision → test:logic → 发布。
   - npm test 通过（25/25，rec mp4 16.8MB，errs 0）；test:ae 通过（621 层 8761 key，PSNR avg 35.9 min 28.7）；test:3d 通过（BLENDER PASS，PSNR 26.5–29.4）。下一步 test:norec → test:collision → test:logic。
   - test:norec 通过（NOAUTOREC OK）；test:collision 16/16 通过；test:logic 通过（含主题迁移 5 项 + 大脚掌 21 板/25 螺丝/27 孔、solvePhys 36 步 5.1s）。下一步 build → 提交 v1.8 → push → Pages cmp → 部署 cmp。
+- v1.8 发布（2026-10-19 00:10 UTC+8，07cc06c）：build OK；test:autoall 6/6（含经典款，abort/nudge/ghost/mispredict 0）/npm test/test:ae/test:3d/test:norec/test:collision(16/16)/test:logic 通过。Pages built 07cc06c cmp 一致；服务器 /screw/ cmp 一致。
