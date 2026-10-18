@@ -76,3 +76,6 @@
   - src/sim.js：createSim/simTick/simEvent（螺丝物理位置 = vHole，落座+releaseDelay 时切换）；冻结：全部静止就停止积分并存快照；有物理变化的事件先从快照 restoreWorld 再积分（实时与预测同起点同步数）；无变化（quietMove：钉数不引起转换、新旧孔附近无动态板）两边都不积分。predictMove（3s 上限，不静止=不走）；stateFromBodies（逻辑 removed/swing/rest/npins 来自物理）；visBlockedBy（实时点击与求解器同一遮挡判定）；solvePhys（DFS + 预测缓存 L._simCache + 粗状态去重 + 先深入“板离开且无新托住”的子步）；validateLevel 注册到 level.js（generateLevel/shapegen 用 validate，genSolveMs 默认 2500ms）。level.js 的 solve 现为解析模型（pred 默认 false，logic-test 用）。
   - main.js：累加器 tick；pend → simEvent；冻结且无螺丝在途时 syncLogic；自动通关用 solvePhys，每步带预测快照，静止后与实际快照逐字段比较（__autoStats.mispredict），去掉 nudge。
   - 参考关卡 solvePhys 43 步 5.4s（node）。下一步：跑 random 1/7/42×3、build、test:autoall（看 mispredict/abort），然后其余套件。
+  - 结果（4e10809 之后数个提交）：test:autoall 5/5 PASS——reference(43 步)/random1(58)/random7(127)/random42×3(75)/image(81)，abort 0、nudge 0、ghosts 0、mispredict 0（每步实际快照与预测逐字段完全相同）。关键修复：快照里 gone 板只记状态；恢复时不为 gone 板建刚体（否则宽相树不同 → 不逐位一致）。
+  - 已知：随机关生成要做物理求解，3 层约 10–20s（每次失败 +1 空孔，genSolveMs 4000/次）。
+  - 下一步：rest-on-screw 测试（main.js loadLevel 钩子 + test/rest-screw-test.mjs + screenshots/rest_on_screw.jpg）、AE/3D 检查、所有套件逐个、发布。
