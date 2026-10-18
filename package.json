@@ -12,7 +12,8 @@
     "test:norec": "node test/no-autorec.mjs",
     "test:holes": "node test/hole-align-test.mjs",
     "test:collision": "esbuild test/collision-test.mjs --bundle --platform=node --format=esm --log-level=warning --outfile=/tmp/screw-coll.mjs && node /tmp/screw-coll.mjs",
-    "test:3d": "E3D=1 node test/ae-export.mjs && bash test/export3d-blender.sh"
+    "test:3d": "E3D=1 node test/ae-export.mjs && bash test/export3d-blender.sh",
+    "test:collcap": "node test/collision-capture.mjs"
   },
   "repository": {
     "type": "git",

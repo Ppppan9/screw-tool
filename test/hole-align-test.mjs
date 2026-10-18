@@ -28,6 +28,9 @@ await tryPut([482, 757], 'swungOldBaseHole');
 const moved = await p.evaluate(h => __game.holeWorld(h), h22r);
 const pv = await p.evaluate(() => { const L = __game.L, pi = L.plates.findIndex(q => q.holes.length === 2 && q.holes.some(h => Math.hypot(L.holes[h].x - 482, L.holes[h].y - 757) < 4)); const b = __game.plateVis[pi]; const h = L.holes.find(h => Math.hypot(h.x - 482, h.y - 757) < 4); const c = Math.cos(b.ang), s = Math.sin(b.ang), ux = h.x - b.C[0], uy = h.y - b.C[1]; return [b.C[0] + c * ux - s * uy + b.dx, b.C[1] + s * ux + c * uy + b.dy]; });
 R.movedPlateHole = pv.map(v => +v.toFixed(1));
+// v1.6：板孔是镂空——错位后孔里透出粉色底板（不是纯黑）
+R.holePix = await p.evaluate(([x, y]) => { const v = __game.view(), g = stage.getContext('2d'); const px = Math.round(v.k * (v.b * x + v.tx)), py = Math.round(v.k * (v.b * y + v.ty) + v.oy); return [...g.getImageData(px, py, 1, 1).data].slice(0, 3); }, [pv[0] - 1.6, pv[1] + 8]);
+R.basePix = await p.evaluate(([x, y]) => { const v = __game.view(), g = stage.getContext('2d'); const px = Math.round(v.k * (v.b * x + v.tx)), py = Math.round(v.k * (v.b * y + v.ty) + v.oy); return [...g.getImageData(px, py, 1, 1).data].slice(0, 3); }, [400, 668]);
 fs.mkdirSync('/tmp/holeal', { recursive: true }); fs.writeFileSync('/tmp/holeal/view.json', JSON.stringify(await p.evaluate(() => __game.view())));
 await tryPut(pv, 'swungMovedPlateHole', '/tmp/holeal/moved.jpg');
 // 拧走摆动板最后一颗（支点）→ 掉落；下落过程中它的孔位/盖住的底板孔不能放
@@ -45,5 +48,7 @@ R.afterGone = { targetable: await p.evaluate(h => __game.holeTargetable(h), h22r
 const ok3 = await tryPut([482, 757], 'clearedBaseHole', '/tmp/holeal/cleared.jpg');
 await b.close();
 console.log(JSON.stringify(R), errs);
-const ok = R.swing > 12 && !R.swungOldBaseHole.accepted && !R.swungMovedPlateHole.accepted && R.fallingBlocked && !R.duringFall.accepted && R.afterGone.targetable && ok3 && !errs.length;
+const pink = c => c[0] > 130 && c[0] > c[2] + 10 && c[0] > c[1] + 15;
+R.holeShowsBase = pink(R.holePix); R.alignedDark = (R.basePix[0] + R.basePix[1] + R.basePix[2]) / 3 < 70;
+const ok = R.holeShowsBase && R.swing > 12 && !R.swungOldBaseHole.accepted && !R.swungMovedPlateHole.accepted && R.fallingBlocked && !R.duringFall.accepted && R.afterGone.targetable && ok3 && !errs.length;
 console.log(ok ? 'HOLEALIGN OK' : 'HOLEALIGN FAIL'); process.exit(ok ? 0 : 1);
