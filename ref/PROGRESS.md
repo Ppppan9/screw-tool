@@ -100,3 +100,4 @@
   - main.js：newGameUI()（按钮/设置改动/图片 onload）先显示常驻 toast“正在生成…”再延迟同步生成，genToken 作废被同步 newGame() 取代的延迟生成；生成 >1.5s 显示“关卡已生成（Xs，尝试 N 次）”；toast(t, dur=0 常驻)/toastHide；图片未加载时 imageLevel 返回 null（保留当前关卡）。
   - 下一步：逐个跑 test:logic → test:rest → test:collision → test:cover → test:autoall → test:overlap（后台 + AwaitShell），然后 build/提交 'v1.7.3: 图形关卡生成提速'/push/Pages cmp/部署 cmp。
   - 测试（未提交最终版前）：test:logic/rest/collision(16/16) 通过；test:cover rc=0（cat 现在 12s 生成，以前 >60s → waitForFunction 超时即 rc=1 的原因；覆盖率 heart ≥98.2% star ≥99.1% cat ≥99.6%）。下一步 test:autoall → test:overlap → 发布。
+  - test:autoall 5/5 通过（abort/nudge/ghost/mispredict 均 0）。下一步 test:overlap → 发布。
