@@ -20,3 +20,4 @@ test:collision rc=0 0s
 test:autoall rc=0 718s
 test:autoall rc=0 713s
 npm-test rc=0 104s
+test:ae rc=0 136s
