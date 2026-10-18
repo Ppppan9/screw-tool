@@ -96,3 +96,6 @@
   - 已做（WIP 提交）：world.js overlapArea 改逐行扫描线 + 超过阈值提前返回（与逐点 inPoly 计数逐位相同，/tmp 对拍 1574 对 0 差异；cat 剖析里它占 27%）；sim.js solvePhys 每个预测前检查预算；shapegen.levelFromImage：解析求解器预过滤、每次失败 +genEmptyStep(1) 空孔、imgSolveMs(2500) 预算、S.onGenProgress 回调。test/_prof.mjs（esbuild 打包后 node：predictMove 耗时分布，需 /tmp/lv_*.json 由 test/_dumplv.mjs 生成）。
   - 结果 1（imgSolveMs 2500, step 1）：heart 7.6s(3 次，比之前 3.3s 慢：原来 3.2s 成功的被 2.5s 预算截断)、star_hole 6.4s、cat 26s(13 次，13 板/16 空孔)。cat 物理每 tick ~75ms（531 个凸块 + TOI），节点数少是瓶颈。
   - 下一步：试 imgSolveMs 3500；main.js 进度 toast（btnShape/设置改动走延迟生成 + token，newGame() 保持同步供测试）；图片未加载时不再先生成默认图形关卡（双倍耗时）。
+  - imgSolveMs=3500（默认）：_genbench heart 3.4s(1 次) / star_hole 7.0s(2) / cat 11.5s(5，21 板)；shape-test（浏览器 UI 流程）heart 3.4s / star_hole 7.3s / cat 12.0s，全部自动通关 solved，fail 0。
+  - main.js：newGameUI()（按钮/设置改动/图片 onload）先显示常驻 toast“正在生成…”再延迟同步生成，genToken 作废被同步 newGame() 取代的延迟生成；生成 >1.5s 显示“关卡已生成（Xs，尝试 N 次）”；toast(t, dur=0 常驻)/toastHide；图片未加载时 imageLevel 返回 null（保留当前关卡）。
+  - 下一步：逐个跑 test:logic → test:rest → test:collision → test:cover → test:autoall → test:overlap（后台 + AwaitShell），然后 build/提交 'v1.7.3: 图形关卡生成提速'/push/Pages cmp/部署 cmp。
