@@ -280,6 +280,8 @@ export function stepWorld(W, pins, pinW, dt, S, obst) {
 export function snapWorld(W) {
   return {
     bodies: W.bodies.map((b, pi) => {
+      // 已离开的板只记状态（画面上 b.out 抛体动画会继续改 dx/dy，不能进快照）
+      if (b.s === 'gone') return { s: 'gone', ang: 0, dx: 0, dy: 0, cx: 0, cy: 0, n: 0, lastPiv: null, pivW: null, piv: null, ang0: 0, posed: true, ppGhost: false, ghost: !!b.ghost, rest: false, sup: null, relAng: 0, tf: 0 };
       const body = W.plates[pi].body, r = { s: b.s, ang: b.ang, dx: b.dx, dy: b.dy, cx: b.cx, cy: b.cy, n: b.n, lastPiv: b.lastPiv, pivW: b.pivW, piv: b.piv, ang0: b.ang0, posed: b.posed, ppGhost: !!b.ppGhost, ghost: !!b.ghost, rest: !!b.rest, sup: b.sup ? { s: b.sup.s.slice(), p: b.sup.p.slice() } : null, relAng: b.relAng, tf: b.tf || 0 };
       if (body && b.s !== 'on') { const p = body.getPosition(), v = body.getLinearVelocity(); r.px = p.x; r.py = p.y; r.a = body.getAngle(); r.vx = v.x; r.vy = v.y; r.w = body.getAngularVelocity(); }
       return r;
@@ -288,7 +290,7 @@ export function snapWorld(W) {
   };
 }
 export function restoreWorld(L, bodies, S, snap, obst) {
-  snap.bodies.forEach((r, pi) => { const b = bodies[pi]; Object.assign(b, { s: r.s, ang: r.ang, dx: r.dx, dy: r.dy, cx: r.cx, cy: r.cy, n: r.n, lastPiv: r.lastPiv && r.lastPiv.slice(), pivW: r.pivW && r.pivW.slice(), piv: r.piv && r.piv.slice(), ang0: r.ang0, posed: r.posed, ppGhost: r.ppGhost, ghost: r.ghost, rest: r.rest, sup: r.sup ? { s: r.sup.s.slice(), p: r.sup.p.slice() } : null, relAng: r.relAng, tf: r.tf, restT: 0, settleT: 0, settled: false, ppT: 0, prog: { cy: r.cy, t: r.tf }, om: r.w || 0, nudge: false, ghostNow: false }); });
+  snap.bodies.forEach((r, pi) => { const b = bodies[pi]; if (r.s === 'gone' && b.s === 'gone') return; Object.assign(b, { s: r.s, ang: r.ang, dx: r.dx, dy: r.dy, cx: r.cx, cy: r.cy, n: r.n, lastPiv: r.lastPiv && r.lastPiv.slice(), pivW: r.pivW && r.pivW.slice(), piv: r.piv && r.piv.slice(), ang0: r.ang0, posed: r.posed, ppGhost: r.ppGhost, ghost: r.ghost, rest: r.rest, sup: r.sup ? { s: r.sup.s.slice(), p: r.sup.p.slice() } : null, relAng: r.relAng, tf: r.tf, restT: 0, settleT: 0, settled: false, ppT: 0, prog: { cy: r.cy, t: r.tf }, om: r.w || 0, nudge: false, ghostNow: false }); });
   const W = createWorld(L, bodies, S);
   W.bodies.forEach((b, pi) => {
     const q = W.plates[pi], body = q.body;
