@@ -113,6 +113,11 @@ export const GROUPS = [
     ['releaseSpinK', '掉落初始旋转(度/秒 每 px 钉偏心，参考≈8.3)', 'range', 8.3, 0, 40, 0.1],
     ['fallSpin', '掉落额外旋转(度/秒)', 'range', 0, -360, 360, 5],
     ['fallFade', '下落时淡出', 'bool', false],
+    ['collide', '下落板与螺丝碰撞（螺丝杆挡住下落的板）', 'bool', true],
+    ['collShaftR', '碰撞螺丝杆半径(px)', 'range', 6, 1, 20, 0.5],
+    ['collRest', '碰撞弹性（恢复系数 0=不弹 1=全弹）', 'range', 0.2, 0, 1, 0.05],
+    ['collFric', '碰撞摩擦系数', 'range', 0.3, 0, 1.5, 0.05],
+    ['collMaxMs', '碰撞有效时长(ms，超时后穿过，防止卡住)', 'range', 1500, 200, 6000, 100],
   ]],
   ['文字', [
     ['discShow', '显示底部免责声明', 'bool', false],

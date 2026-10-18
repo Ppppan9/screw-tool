@@ -58,7 +58,7 @@ function rebuild() {
   bgCanvas = document.createElement('canvas'); bgCanvas.width = cv.width; bgCanvas.height = cv.height;
   drawBackground(bgCanvas, S, cv.width, cv.height, view().k, bgImg);
   sprites = L.plates.map((p, i) => plateSprite(p, S, i, Math.max(1, dpr), p.holes.map(h => [L.holes[h].x, L.holes[h].y])));
-  if (!plateVis || plateVis.length !== L.plates.length) plateVis = L.plates.map((p, i) => newBody(p.poly, [sprites[i].x + sprites[i].w / 2, sprites[i].y + sprites[i].h / 2]));
+  if (!plateVis || plateVis.length !== L.plates.length) plateVis = L.plates.map((p, i) => newBody(p.poly, [sprites[i].x + sprites[i].w / 2, sprites[i].y + sprites[i].h / 2], p.holes.map(h => [L.holes[h].x, L.holes[h].y])));
   baseCanvas = document.createElement('canvas'); baseCanvas.width = Math.ceil(720 * dpr); baseCanvas.height = Math.ceil(1280 * dpr);
   const bc = baseCanvas.getContext('2d'); bc.scale(dpr, dpr); drawBase(bc, L, S);
 }
@@ -134,9 +134,11 @@ function step(t, dt) {
   pend = pend.filter(q => { if (t >= q.t) { vHole[q.si] = q.hi; return false; } return true; });
   const vst = { screwHole: vHole, removed: st.removed, lifted: null };
   const pinsOf = L.plates.map((_, pi) => platePins(L, vst, pi));
+  // v1.6：仍插在底板里的螺丝（含正在拧入/放回的）是下落板的障碍；拧起/悬停/飞行中的不算
+  const obst = []; st.screwHole.forEach((h, si) => { const a = screwVis[si].anim; if (h < 0 || (a && (a.k === 'lift' || a.k === 'hover' || a.k === 'fly'))) return; const w = holeWorld(h); obst.push({ id: si, x: w[0], y: w[1] }); });
   plateVis.forEach((pv, pi) => {
     const pins = pinsOf[pi], pw = pins.length === 1 ? holeWorld(vHole[pins[0]]) : null;
-    const ev = stepBody(pv, pins.length, pw, Math.min(dt, 0.05), S);
+    const ev = stepBody(pv, pins.length, pw, Math.min(dt, 0.05), S, obst);
     if (ev === 'fall') sfx.fall(S);
   });
   if (!finishedAt && done(L, st) && plateVis.every(p => p.s === 'gone')) { finishedAt = t; onFinish(); }
