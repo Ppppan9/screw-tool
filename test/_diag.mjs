@@ -1,0 +1,11 @@
+import fs from 'fs';
+import { solve, initState, usableHoles, screwFree, applyMove, platePins, coverInfo } from '../src/level.js';
+const n = process.argv[2] || 'cat', a = +(process.argv[3] || 22);
+const { S, out } = JSON.parse(fs.readFileSync(`/tmp/lv_${n}.json`)); const L = out[a];
+const st = initState(L);
+console.log('plates', L.plates.length, 'holes', L.holes.length, 'screws', L.screws.length);
+console.log('usable', usableHoles(L, st));
+console.log('free', L.screws.map((_, si) => screwFree(L, st, si) ? si : -1).filter(x => x >= 0));
+console.log('layers', L.plates.map((p, i) => i + ':L' + p.layer + ':h' + p.holes.join('/') + ':pins' + platePins(L, st, i).join('/')).join(' '));
+const empt = L.holes.map((_, i) => i).filter(i => !L.screws.some(s => s.hole === i));
+console.log('empty holes', empt.map(h => h + ' cov=' + coverInfo(L)[h].join('/')).join(' | '));

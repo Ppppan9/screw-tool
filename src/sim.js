@@ -168,5 +168,6 @@ export function solvePhys(L, S, snap0, opts = {}) {
   return plan;
 }
 // 生成器校验：从初始状态用预测求解器求解（有时间预算）
-export function validateLevel(L, S, timeMs = 6000) { const sim = createSim(L, S); return !!solvePhys(L, S, sim.snap, { sim, timeMs }); }
+export const genStats = { last: null };
+export function validateLevel(L, S, timeMs = 6000) { const t = Date.now(); const sim = createSim(L, S); const stats = {}; const ok = !!solvePhys(L, S, sim.snap, { sim, timeMs, stats }); stats.createMs = stats.ms != null ? Date.now() - t - stats.ms : 0; genStats.last = stats; return ok; }
 setValidator((L, S, timeMs) => validateLevel(L, S, timeMs));

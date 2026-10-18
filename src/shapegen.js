@@ -62,12 +62,12 @@ export function levelFromImage(img, S, seed0) {
   for (let attempt = 0; attempt < 24; attempt++) {
     const L = buildOnce(img, S, seed0 + attempt * 977, Math.floor(attempt / 2));
     if (!L) break;
-    const t = performance.now(); const ok = L.plates.length && validate(L, S, S.genSolveMs ?? 4000, 12000); log.push([attempt, Math.round(performance.now() - t), !!ok]);
+    const t = performance.now(); const ok = L.plates.length && validate(L, S, S.genSolveMs ?? 4000, 12000); log.push([attempt, Math.round(performance.now() - t), !!ok, L.plates.length, L.holes.length - L.screws.length, JSON.stringify(globalThis.__genStats && globalThis.__genStats.last)]); if (globalThis.__genLog) globalThis.__genLog(log[log.length - 1]);
     if (ok) { L.seed = seed0 + attempt * 977; L.attempts = attempt + 1; L.genLog = log; L.genMs = Math.round(performance.now() - T0); return L; }
   }
-  const R = referenceLevel(); R.name = 'reference(fallback)'; return R;
+  const R = referenceLevel(); R.name = 'reference(fallback)'; R.genLog = log; return R;
 }
-function buildOnce(img, S, seed, extraEmpty) {
+export function buildOnce(img, S, seed, extraEmpty) {
   const rnd = mulberry(seed);
   const iw = img.naturalWidth || img.width, ih = img.naturalHeight || img.height; if (!iw || !ih) return null;
   const k0 = Math.min(1, 1024 / Math.max(iw, ih)); const sw = Math.max(1, Math.round(iw * k0)), sh = Math.max(1, Math.round(ih * k0));
@@ -148,11 +148,27 @@ function buildOnce(img, S, seed, extraEmpty) {
     }
   }
   if (!L.plates.length) return L;
+  // v1.7.3：下层板的螺丝不能被上层板（实体部分）盖住——阻挡规则下螺丝会同时固定上层板，而上层板又压住这颗螺丝 → 死锁（cat 图 24 次全部求解失败）。
+  // 被盖住的下层孔直接去掉；若下层板因此一颗螺丝都不剩（也没有别的螺丝穿过它），就去掉盖住它的上层板。
+  const dropH = new Set();
+  { const orig = L.plates.map(p => p.holes.slice()); let alive = L.plates.map(() => true);
+    for (let it = 0; it < 8; it++) {
+      L.plates.forEach((p, pi) => { p.holes = orig[pi].slice(); });
+      const coveredBy = (pi, h) => L.plates.map((q, qi) => qi).filter(qi => alive[qi] && L.plates[qi].layer > L.plates[pi].layer && !L.plates[qi].holes.includes(h) && pointInPoly(L.holes[h].x, L.holes[h].y, L.plates[qi].poly));
+      let changed = false;
+      L.plates.forEach((p, pi) => { if (!alive[pi]) return; const cov = p.holes.map(h => [h, coveredBy(pi, h)]).filter(c => c[1].length); if (!cov.length) return;
+        p.holes = p.holes.filter(h => !cov.some(c => c[0] === h));
+        if (!p.holes.length && !L.plates.some((q, qi) => qi !== pi && alive[qi] && q.holes.some(h => pointInPoly(L.holes[h].x, L.holes[h].y, p.poly)))) { cov.forEach(c => c[1].forEach(qi => { alive[qi] = false; })); changed = true; } });
+      if (!changed) break;
+    }
+    L.plates.forEach((p, pi) => orig[pi].forEach(h => { if (!p.holes.includes(h) || !alive[pi]) dropH.add(h); }));
+    L.plates = L.plates.filter((_, pi) => alive[pi]);
+    L.plates.forEach(p => p.holes.forEach(h => dropH.delete(h))); }
   // 初始可见空孔：去掉若干块未被上层覆盖的小板，在其位置放空孔（同参考关卡露出底板的空孔）
   const nEmpty = S.imgEmpty + extraEmpty;
   const order = L.plates.map((p, i) => i).filter(i => L.plates[i].layer === 0).sort((a, b) => Math.abs(polyArea(L.plates[a].poly)) - Math.abs(polyArea(L.plates[b].poly)));
   const removed = new Set();
-  for (const pi of order) { if (removed.size >= nEmpty) break; const p = L.plates[pi], h = L.holes[p.holes[0]];
+  for (const pi of order) { if (removed.size >= nEmpty) break; const p = L.plates[pi], h = L.holes[p.holes[0]]; if (!h) continue;
     if (L.plates.some((o, oi) => oi !== pi && pointInPoly(h.x, h.y, o.poly))) continue; removed.add(pi); }
   L.plates = L.plates.filter((_, i) => !removed.has(i));
   const used = new Set(L.plates.flatMap(p => p.holes));
@@ -161,7 +177,7 @@ function buildOnce(img, S, seed, extraEmpty) {
   const remap = new Map(), holes2 = [];
   L.holes.forEach((h, i) => { if (used.has(i)) { remap.set(i, holes2.length); holes2.push(h); } });
   const emptyStart = holes2.length;
-  L.holes.forEach((h, i) => { if (!used.has(i) && holes2.slice(emptyStart).length < nEmpty) holes2.push(h); });
+  L.holes.forEach((h, i) => { if (!used.has(i) && !dropH.has(i) && holes2.slice(emptyStart).length < nEmpty) holes2.push(h); });
   L.holes = holes2; L.plates.forEach(p => p.holes = p.holes.map(h => remap.get(h)));
   // 隐藏底孔：被板盖住
   let t = 0, made = 0; while (made < S.imgHidden && t++ < 500) { const p = inside(rnd); if (!p) break; const i = Math.round((p[0] - gx0) / g) + Math.round((p[1] - gy0) / g) * nx; if (dIn[i] < S.holeSize * 0.7) continue; if (!L.holes.every(h => Math.hypot(h.x - p[0], h.y - p[1]) >= holeMinD)) continue; if (!L.plates.some(pl => pointInPoly(p[0], p[1], pl.poly))) continue; L.holes.push({ x: p[0], y: p[1] }); made++; }
