@@ -232,7 +232,7 @@ export function done(L, st) { return st.removed.size === L.plates.length && !(st
 //   st.rest: pi → { pose, scr: [[si, hole]], pl: [pj] }
 function restCovers(st, hi, strict) {
   if (!st.rest || !st.rest.size) return false;
-  for (const r of st.rest.values()) if ((strict ? r.pose.inn : r.pose.cov).has(hi) && !r.pose.al.has(hi)) return true;
+  for (const r of st.rest.values()) if (r.pose.inn.has(hi) && !r.pose.al.has(hi)) return true; // 被托住的板只挡中心在其轮廓内的孔（贴边不挡，避免堆积时整盘无孔可用）
   return false;
 }
 export function setRest(L, st, pi, xf, sup) {

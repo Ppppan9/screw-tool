@@ -135,9 +135,9 @@ function syncScrews(W, obst, S) {
     if (sb) { const p = sb.getPosition(); if (Math.hypot(p.x * PX - o.x, p.y * PX - o.y) > 0.5) { W.pw.destroyBody(sb); W.screws.delete(o.id); for (const k of [...W.pass.keys()]) if (k.split('|').includes('s' + o.id)) W.pass.delete(k); sb = null; } }
     if (!sb) {
       sb = W.pw.createBody({ type: 'static', position: Vec2(o.x / PX, o.y / PX) });
-      sb.createFixture(new Circle(r), { friction: S.collFric ?? 0.3, restitution: S.collRest ?? 0.2 }); sb.setUserData({ k: 's', id: 's' + o.id, sid: o.id }); sb._r = r;
+      sb.createFixture(new Circle(r), { friction: S.collFric ?? 0.3, restitution: S.collRest ?? 0.2, filterCategoryBits: 4 }); sb.setUserData({ k: 's', id: 's' + o.id, sid: o.id }); sb._r = r;
       W.screws.set(o.id, sb); screwOverlaps(W, o.id, sb);
-    } else if (Math.abs(sb._r - r) > 1e-6) { sb.destroyFixture(sb.getFixtureList()); sb.createFixture(new Circle(r), { friction: S.collFric ?? 0.3 }); sb._r = r; }
+    } else if (Math.abs(sb._r - r) > 1e-6) { sb.destroyFixture(sb.getFixtureList()); sb.createFixture(new Circle(r), { friction: S.collFric ?? 0.3, filterCategoryBits: 4 }); sb._r = r; }
   }
   for (const [id, sb] of [...W.screws]) if (!seen.has(id)) { W.pw.destroyBody(sb); W.screws.delete(id); for (const k of [...W.pass.keys()]) if (k.split('|').includes('s' + id)) W.pass.delete(k); }
 }
@@ -214,6 +214,10 @@ export function stepWorld(W, pins, pinW, dt, S, obst) {
         for (let e = body.getContactList(); e; e = e.next) { if (!e.contact.isTouching() || !e.contact.isEnabled()) continue; const u = e.other.getUserData(); if (!u) continue; if (u.k === 's') sup.s.push(u.sid); else if (u.k === 'p') sup.p.push(u.pi); }
         b.rest = sup.s.length + sup.p.length > 0; b.sup = sup;
       } else if (!still) { b.rest = false; b.sup = null; }
+      // 只被其它板托住（没有螺丝支撑）超过 ppStuckMs → 只关闭它与板的碰撞（仍会被螺丝杆挡住）。紧密单层关卡里几乎每块下落板都会
+      // 先压在下方邻板的上边缘，若全都永久托住，整盘空孔很快被盖满而无解；用户反馈的“被下方螺丝挡住”则永久托住。
+      if (b.rest && b.sup && !b.sup.s.length && !b.ppGhost) { b.ppT = (b.ppT || 0) + h; if (b.ppT * 1000 > (S.ppStuckMs ?? 1200)) { b.ppGhost = true; b.rest = false; b.sup = null; W.ppGhosts = (W.ppGhosts || 0) + 1; for (let f = body.getFixtureList(); f; f = f.getNext()) f.setFilterData({ groupIndex: 0, categoryBits: 2, maskBits: 4 }); body.setAwake(true); } }
+      else if (!(b.rest && b.sup && !b.sup.s.length)) b.ppT = 0;
       if (b.nudge && !b.ghost) b.ghostNow = true;
       if (!b.ghost && (b.ghostNow || ((S.collStuckMs ?? 0) > 0 && (b.tf - b.prog.t) * 1000 > S.collStuckMs))) {
         b.ghostNow = false; b.rest = false; b.sup = null; W.ghosts = (W.ghosts || 0) + 1;
