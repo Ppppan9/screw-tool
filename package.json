@@ -14,7 +14,9 @@
     "test:collision": "esbuild test/collision-test.mjs --bundle --platform=node --format=esm --log-level=warning --outfile=/tmp/screw-coll.mjs && node /tmp/screw-coll.mjs",
     "test:3d": "E3D=1 node test/ae-export.mjs && bash test/export3d-blender.sh",
     "test:collcap": "node test/collision-capture.mjs",
-    "test:autoall": "node test/autosolve-all.mjs"
+    "test:autoall": "node test/autosolve-all.mjs",
+    "test:overlap": "node test/overlap-test.mjs",
+    "test:cover": "node test/fixture-cover.mjs"
   },
   "repository": {
     "type": "git",
