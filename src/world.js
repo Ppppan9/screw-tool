@@ -82,7 +82,7 @@ export function createWorld(L, bodies, S) {
     const ins = S.ppInset ?? 1.5, parts = convexParts(ins > 0 ? offsetPoly(L.plates[pi].poly, ins) : L.plates[pi].poly), m = b.m, c0 = toWorld(b, m.cx, m.cy);
     const body = pw.createBody({ type: 'static', position: Vec2(c0[0] / PX, c0[1] / PX), angle: b.ang });
     let fa = 0; for (const c of parts) { try { body.createFixture(new Polygon(c.map(([x, y]) => Vec2((x - m.cx) / PX, (y - m.cy) / PX))), { density: 1, friction: S.ppFric ?? 0.4, restitution: S.ppRest ?? 0.1 }); fa += Math.abs(polyArea(c)); } catch (e) { } }
-    b.fixCover = fa / Math.max(1, Math.abs(polyArea(L.plates[pi].poly)));
+    b.fixCover = fa / Math.max(1, Math.abs(polyArea(L.plates[pi].poly))); b.fixCoverIns = fa / Math.max(1, Math.abs(polyArea(ins > 0 ? offsetPoly(L.plates[pi].poly, ins) : L.plates[pi].poly)));
     body.setUserData({ k: 'p', id: 'p' + pi, pi });
     W.plates.push({ body, joint: null });
   });
