@@ -242,6 +242,9 @@ function drawEnd(t, pv, noDim) {
 function handScaleOf() { return hand.img ? S.handSize * 720 / hand.img.width : 1; }
 const handHiddenByEnd = () => !S.endCardHand && endAlpha(now()) > 0;
 function handState() { if (!S.handShow || !hand.img || !hand.visible || handHiddenByEnd()) return null; return { x: hand.x, y: hand.y, s: handScaleOf() * (1 - S.pressDepth * hand.press) }; }
+// 手指出现在画面上时隐藏系统鼠标（与麻将/咖啡统一：hideCursor）。手动：手指跟随指针（指尖锚点 = 指针位置）；自动通关：手指可见时
+function handCursorHidden() { return !!(S.hideCursor && S.handShow && hand.img && !handHiddenByEnd() && (!autoRunning || hand.visible)); }
+function updateCursor() { const c = handCursorHidden() ? 'none' : 'pointer'; if (cv.style.cursor !== c) cv.style.cursor = c; }
 function drawHand() {
   if (!S.handShow || !hand.img || !hand.visible || handHiddenByEnd()) return;
   const im = hand.img, sc = handScaleOf() * (1 - S.pressDepth * hand.press), w = im.width * sc, h = im.height * sc;
@@ -434,6 +437,7 @@ let lastT = now();
 function loop(t) {
   const dt = Math.min(0.05, (t - lastT) / 1000); lastT = t;
   step(t, dt); updPress(t); draw(t);
+  updateCursor();
   if (aeActive()) { if (recTailDone(t)) aeStop(); else aeRec.sample(t); if (t - (loop.aeBtnT || 0) > 250) { loop.aeBtnT = t; updateAEButtons(); } }
   if (rec) document.getElementById('recInfo').textContent = `录制中 ${((t - recT0) / 1000).toFixed(1)}s`; else document.getElementById('recInfo').textContent = '';
   requestAnimationFrame(loop);

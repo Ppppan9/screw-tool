@@ -1,5 +1,5 @@
 // 设置定义：所有可调参数。版本号 + 迁移。
-export const SETTINGS_VERSION = 14;
+export const SETTINGS_VERSION = 15;
 export const STORE_KEY = 'screwTool.settings';
 // [key, 标签, 类型, 默认, min, max, step]  类型: range/color/bool/select/text/file
 export const GROUPS = [
@@ -176,6 +176,7 @@ export const GROUPS = [
     ['pressDepth', '按压幅度', 'range', 0.07, 0, 0.3, 0.01],
     ['tapRipple', '点击处显示波纹圈（参考视频没有）', 'bool', false],
     ['handShow', '显示手指图片', 'bool', true],
+    ['hideCursor', '手指出现时隐藏鼠标', 'bool', true],
     ['handRest', '空闲位置', 'select', 'br', [['br', '右下角外'], ['hide', '隐藏']]],
     ['autoSelectGap', '点螺丝→点孔间隔(ms)', 'range', 120, 0, 2000, 10],
     ['autoStartDelay', '开始前等待(ms)', 'range', 500, 0, 5000, 50],
@@ -256,6 +257,8 @@ export function migrate(obj) {
   if (v < 13) { if (s.collStuckMs === 1200) delete s.collStuckMs; v = 13; }
   // v13 -> v14（v1.8 主题下拉）：新增 theme（缺省 = 手掌款，即之前的外观，数值不变）、themeStore 与经典款材质键——只补默认
   if (v < 14) { if (s.themeStore && (typeof s.themeStore !== 'object' || Array.isArray(s.themeStore))) delete s.themeStore; v = 14; }
+  // v14 -> v15（v1.8.1）：新增 hideCursor（手指出现时隐藏鼠标，默认开）——只补默认
+  if (v < 15) v = 15;
   const out = { ...DEFS, themeStore: {} };
   for (const k in DEFS) if (k in s && typeof s[k] === typeof DEFS[k]) out[k] = s[k];
   if (!['palm', 'classic'].includes(out.theme)) out.theme = 'palm';
