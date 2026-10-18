@@ -44,11 +44,13 @@ R.fallDy = await p.evaluate(() => Math.round(Math.max(...__game.plateVis.filter(
 R.duringFall = { accepted: (await screwAt(hFinger)) !== sF, plateState: await p.evaluate(() => __game.plateVis.map(b => b.s).filter(s => s !== 'on').join(',')) };
 await W(1500); await idle();
 // 板离开后，原先被盖住的底板孔露出 → 可放
+// v1.7.2：下落板可能被下方螺丝托住而停在画面上（新托住设计）——此时孔仍被挡住是正确的
+R.held = await p.evaluate(() => __game.plateVis.some(b => b.s === 'fall' || b.s === 'rest'));
 R.afterGone = { targetable: await p.evaluate(h => __game.holeTargetable(h), h22r) };
 const ok3 = await tryPut([482, 757], 'clearedBaseHole', '/tmp/holeal/cleared.jpg');
 await b.close();
 console.log(JSON.stringify(R), errs);
 const pink = c => c[0] > 130 && c[0] > c[2] + 10 && c[0] > c[1] + 15;
 R.holeShowsBase = pink(R.holePix); R.alignedDark = (R.basePix[0] + R.basePix[1] + R.basePix[2]) / 3 < 70;
-const ok = R.holeShowsBase && R.swing > 12 && !R.swungOldBaseHole.accepted && !R.swungMovedPlateHole.accepted && R.fallingBlocked && !R.duringFall.accepted && R.afterGone.targetable && ok3 && !errs.length;
+const ok = R.holeShowsBase && R.swing > 12 && !R.swungOldBaseHole.accepted && !R.swungMovedPlateHole.accepted && R.fallingBlocked && !R.duringFall.accepted && (R.held ? (!R.afterGone.targetable && !ok3) : (R.afterGone.targetable && ok3)) && !errs.length;
 console.log(ok ? 'HOLEALIGN OK' : 'HOLEALIGN FAIL'); process.exit(ok ? 0 : 1);
