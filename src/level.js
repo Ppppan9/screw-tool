@@ -83,10 +83,10 @@ function swingPoseAt(L, pi, hi, ang) {
   const sw = { px: h.x, py: h.y, ang, hi };
   sw.poly = p.poly.map(([x, y]) => rotPt(x, y, sw)); sw.holes = p.holes.map(k => rotPt(L.holes[k].x, L.holes[k].y, sw));
   // 预先算好摆动后对准/覆盖的底板孔（求解器/生成器会大量调用）
-  sw.al = new Set(); sw.cov = new Set();
+  sw.al = new Set(); sw.cov = new Set(); sw.inn = new Set();
   L.holes.forEach((h, k) => {
-    if (sw.holes.some(([x, y]) => Math.hypot(x - h.x, y - h.y) <= ALIGN_TOL)) { sw.al.add(k); sw.cov.add(k); }
-    else if (pointInPoly(h.x, h.y, sw.poly) || distToPoly(h.x, h.y, sw.poly) < edgeTol(L, pi, k)) sw.cov.add(k);
+    if (sw.holes.some(([x, y]) => Math.hypot(x - h.x, y - h.y) <= ALIGN_TOL)) { sw.al.add(k); sw.cov.add(k); sw.inn.add(k); }
+    else if (pointInPoly(h.x, h.y, sw.poly)) { sw.cov.add(k); sw.inn.add(k); } else if (distToPoly(h.x, h.y, sw.poly) < edgeTol(L, pi, k)) sw.cov.add(k);
   });
   return sw;
 }
@@ -104,9 +104,12 @@ export function plateAligned(L, st, pi, hi) {
   return sw.al.has(hi);
 }
 // 板 pi 在当前位姿下是否覆盖底板孔 hi（材料或孔）
-export function plateCovers(L, st, pi, hi) {
+// v1.7.1：strict=true 用于“已插着螺丝的孔”（固定/压住判定）：只有孔中心在板轮廓内（或对准）才算。
+//   螺丝杆与板有物理碰撞，摆动板的边只会贴着螺丝杆停下（距孔中心≈杆半径）——贴边不是压住，否则
+//   “板压住螺丝、螺丝又固定板”死锁（heart 关卡自动通关卡在 22/25）。空孔仍用边缘容差（部分遮挡的孔不能放螺丝）。
+export function plateCovers(L, st, pi, hi, strict) {
   const sw = st.swing && st.swing.get(pi); if (!sw) return coverInfo(L)[hi].includes(pi);
-  return sw.cov.has(hi);
+  return strict && sw.inn ? sw.inn.has(hi) : sw.cov.has(hi);
 }
 // 当前位姿下可能覆盖底板孔 hi 的板（静止覆盖表 ∪ 摆动板）
 function coverCands(L, st, hi) { const c = coverInfo(L)[hi]; if (!st.swing || !st.swing.size) return c; const out = new Set(c); st.swing.forEach((_, pi) => out.add(pi)); return [...out]; }
@@ -136,7 +139,7 @@ export function holeUsable(L, st, hi) {
 // 螺丝可取：其位置上方没有更高层且未开孔的板压住
 export function screwFree(L, st, si) {
   const hi = st.screwHole[si]; if (hi < 0) return false;
-  const cov = coverCands(L, st, hi).filter(pi => !st.removed.has(pi) && plateCovers(L, st, pi, hi));
+  const cov = coverCands(L, st, hi).filter(pi => !st.removed.has(pi) && plateCovers(L, st, pi, hi, true));
   const pinnedTop = Math.max(-1, ...cov.filter(pi => plateAligned(L, st, pi, hi)).map(pi => L.plates[pi].layer));
   return !cov.some(pi => !plateAligned(L, st, pi, hi) && L.plates[pi].layer > pinnedTop);
 }
@@ -144,7 +147,7 @@ export function plateScrews(L, st, pi) { return st.screwHole.map((h, si) => h >=
 // 固定某块板的螺丝：自己孔里的螺丝 + （阻挡判定）任何位置落在该板轮廓内的螺丝（螺丝贯穿该点所有重叠板直到底板）
 export function platePins(L, st, pi) {
   if (!BLOCK) return plateScrews(L, st, pi);
-  return st.screwHole.map((h, si) => h >= 0 && !isLifted(st, si) && plateCovers(L, st, pi, h) ? si : -1).filter(i => i >= 0);
+  return st.screwHole.map((h, si) => h >= 0 && !isLifted(st, si) && plateCovers(L, st, pi, h, true) ? si : -1).filter(i => i >= 0);
 }
 // 执行移动，返回掉落板列表。每次螺丝移动后重新评估所有板（不动点迭代）：
 // 目标孔里的螺丝会立即挡住覆盖该点的板；拔出的螺丝会释放所有被它贯穿的板
@@ -185,10 +188,10 @@ export function poseFromXf(L, pi, xf) {
   const T = (x, y) => { const ux = x - xf.C[0], uy = y - xf.C[1]; return [xf.C[0] + c * ux - s * uy + xf.dx, xf.C[1] + s * ux + c * uy + xf.dy]; };
   const sw = { ang: xf.ang, dx: xf.dx, dy: xf.dy, C: xf.C, hi: xf.hi ?? -1, xf: true };
   sw.poly = p.poly.map(([x, y]) => T(x, y)); sw.holes = p.holes.map(k => T(L.holes[k].x, L.holes[k].y));
-  sw.al = new Set(); sw.cov = new Set();
+  sw.al = new Set(); sw.cov = new Set(); sw.inn = new Set();
   L.holes.forEach((h, k) => {
-    if (sw.holes.some(([x, y]) => Math.hypot(x - h.x, y - h.y) <= ALIGN_TOL)) { sw.al.add(k); sw.cov.add(k); }
-    else if (pointInPoly(h.x, h.y, sw.poly) || distToPoly(h.x, h.y, sw.poly) < edgeTol(L, pi, k)) sw.cov.add(k);
+    if (sw.holes.some(([x, y]) => Math.hypot(x - h.x, y - h.y) <= ALIGN_TOL)) { sw.al.add(k); sw.cov.add(k); sw.inn.add(k); }
+    else if (pointInPoly(h.x, h.y, sw.poly)) { sw.cov.add(k); sw.inn.add(k); } else if (distToPoly(h.x, h.y, sw.poly) < edgeTol(L, pi, k)) sw.cov.add(k);
   });
   return sw;
 }
