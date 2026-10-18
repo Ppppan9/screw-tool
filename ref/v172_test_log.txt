@@ -19,3 +19,4 @@ test:collision rc=0 0s
 --- full run 2026-10-18 20:04:34 (bb83c4c, cont.)
 test:autoall rc=0 718s
 test:autoall rc=0 713s
+npm-test rc=0 104s
