@@ -15,6 +15,7 @@ await p.evaluate(() => {
   __game.loadLevel(L);
 });
 await W(300);
+await p.evaluate(() => __game.aeStart()); // AE/3D 记录：检查长时间托住在导出里是静止的
 const idle = async () => { for (let i = 0; i < 300; i++) { if (await p.evaluate(() => !__game.screwVis.some(v => v.anim) && !__game.pending && !__game.physBusy())) return; await W(30); } };
 const move = async (from, to) => { await p.evaluate(h => __game.tapHole(h), from); await W(250); await p.evaluate(h => __game.tapHole(h), to); };
 const body = () => p.evaluate(() => { const v = __game.plateVis[0]; return { s: v.s, dx: +v.dx.toFixed(3), dy: +v.dy.toFixed(3), ang: +(v.ang * 180 / Math.PI).toFixed(3), rest: !!v.rest, sup: v.sup ? v.sup.s.slice() : null, ghosts: (__game.world && __game.world.ghosts) || 0 }; });
@@ -38,7 +39,13 @@ let shotFall = false;
 for (let i = 0; i < 100; i++) { await W(40); const s = await body(); if (!shotFall && s.dy > R.after5s.dy + 25) { shotFall = true; await snap(`S1 moved: P falls (ang=${s.ang.toFixed(0)}°)`); } if (s.s === 'gone') break; }
 await W(800); R.final = await body(); await snap('P gone'); 
 R.gone = R.final.s === 'gone'; R.logicRemoved = await p.evaluate(() => __game.st.removed.has(0) && !(__game.st.rest && __game.st.rest.size));
+// 导出 AE / 3D
+const tLand = R.landT = await p.evaluate(() => { const s = (__game.aeRec.rec).plates[0]; const k = s.findIndex(e => e[1] === 1); return s[k][0]; });
+const dump = async (fn, file) => { const b64 = await p.evaluate(async fn => { const r = await __game[fn](false); const buf = new Uint8Array(await r.blob.arrayBuffer()); let bin = ''; for (let i = 0; i < buf.length; i += 0x8000) bin += String.fromCharCode.apply(null, buf.subarray(i, i + 0x8000)); return btoa(bin); }, fn); fs.writeFileSync(file, Buffer.from(b64, 'base64')); };
+await dump('doExportAE', '/tmp/restscrew/ae.zip'); await dump('doExport3D', '/tmp/restscrew/e3d.zip');
+R.rawHold = await p.evaluate(() => { const s = __game.aeRec.rec.plates[0]; const k = s.findIndex(e => e[1] === 1); const land = s.find(e => e[0] > s[k][0] + 1.2); const hold = s.filter(e => e[0] > land[0] && e[0] < land[0] + 4.5); return { n: hold.length, maxD: Math.max(...hold.map(e => Math.hypot(e[2] - land[2], e[3] - land[3]) + Math.abs(e[4] - land[4]))), dur: hold.length ? hold[hold.length - 1][0] - hold[0][0] : 0 }; });
 await b.close();
+R.exportCheck = JSON.parse(execFileSync('python3', ['test/rest-export-check.py', '/tmp/restscrew/ae.zip', '/tmp/restscrew/e3d.zip']).toString());
 // 拼图
 const out = process.cwd() + '/screenshots/rest_on_screw.jpg';
 execFileSync('python3', ['-c', `
@@ -53,5 +60,5 @@ except Exception: font=None
 for i,(im,(f,l)) in enumerate(zip(ims,fr)): out.paste(im,(360*i,34)); d.text((360*i+6,8),f'{i+1}. '+l,fill='black',font=font)
 out.save(sys.argv[2],quality=90)`, JSON.stringify(frames), out]);
 console.log(JSON.stringify(R), errs);
-const ok = R.landed.s === 'fall' && R.landed.rest && R.landed.sup && R.landed.sup.length > 0 && R.landed.dy > 20 && R.maxDrift < 0.5 && R.maxAngDrift < 0.5 && R.after5s.rest && R.logicRest && R.notDone && R.after5s.ghosts === 0 && shotFall && R.gone && R.logicRemoved && !errs.length;
+const ok = R.landed.s === 'fall' && R.landed.rest && R.landed.sup && R.landed.sup.length > 0 && R.landed.dy > 20 && R.maxDrift < 0.5 && R.maxAngDrift < 0.5 && R.after5s.rest && R.logicRest && R.notDone && R.after5s.ghosts === 0 && shotFall && R.gone && R.logicRemoved && R.rawHold.n > 60 && R.rawHold.maxD < 0.01 && R.exportCheck.ok && !errs.length;
 console.log('screenshot', out); console.log(ok ? 'RESTSCREW OK' : 'RESTSCREW FAIL'); process.exit(ok ? 0 : 1);
