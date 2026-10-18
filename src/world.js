@@ -81,6 +81,7 @@ export function createWorld(L, bodies, S) {
   const pw = new World({ gravity: Vec2(0, (S.gravity || 3600) / PX), allowSleep: false, continuousPhysics: false }); // 固定 1/120s 步长下板（≥30px）不会一步穿过螺丝杆，关闭 TOI 省时 // v1.7.2：不休眠——被托住的板在支撑移走后必须立即下落
   const W = { pw, L, S, bodies, ground: pw.createBody(), plates: [], screws: new Map(), pass: new Map(), steps: 0 };
   bodies.forEach((b, pi) => {
+    if (b.s === 'gone') { W.plates.push({ body: null, joint: null }); return; } // 恢复快照：已离开的板不建刚体（否则实时/预测两边插入-删除的位置不同 → 宽相树结构不同 → 接触顺序不同 → 结果不逐位一致）
     const ins = S.ppInset ?? 1.5, parts = partsOf(L.plates[pi], ins), m = b.m, c0 = toWorld(b, m.cx, m.cy);
     const body = pw.createBody({ type: 'static', position: Vec2(c0[0] / PX, c0[1] / PX), angle: b.ang });
     let fa = 0; for (const c of parts) { try { body.createFixture(new Polygon(c.map(([x, y]) => Vec2((x - m.cx) / PX, (y - m.cy) / PX))), { density: 1, friction: S.ppFric ?? 0.4, restitution: S.ppRest ?? 0.1 }); fa += Math.abs(polyArea(c)); } catch (e) { } }
@@ -294,7 +295,7 @@ export function restoreWorld(L, bodies, S, snap, obst) {
   const W = createWorld(L, bodies, S);
   W.bodies.forEach((b, pi) => {
     const q = W.plates[pi], body = q.body;
-    if (b.s === 'gone') { W.pw.destroyBody(body); q.body = null; return; }
+    if (b.s === 'gone') return;
     if (b.s === 'on') return;
     const r = snap.bodies[pi];
     body.setType('dynamic'); body.setTransform(Vec2(r.px, r.py), r.a); body.setLinearVelocity(Vec2(r.vx, r.vy)); body.setAngularVelocity(r.w);
