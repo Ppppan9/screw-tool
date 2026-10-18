@@ -131,7 +131,7 @@ export function stepWorld(W, pins, pinW, dt, S, obst) {
         b.s = 'fall'; b.posed = true; ev[pi] = 'fall'; b.tf = 0; b.prog = { cy: cm[1], t: 0 }; b.ghost = false;
         if (q.joint) { W.pw.destroyJoint(q.joint); q.joint = null; }
         if (wasStatic) { body.setType('dynamic'); body.setLinearVelocity(Vec2(0, 0)); body.setAngularVelocity(0); }
-        body.setAngularDamping(S.angDamp ?? 0.6); body.setBullet(true); body.setAwake(true);
+        body.setAngularDamping(S.angDamp ?? 1.5); body.setBullet(true); body.setAwake(true);
         body.setAngularVelocity(body.getAngularVelocity() + Math.max(-360, Math.min(360, (S.releaseSpinK || 0) * rx)) * D2R + (S.fallSpin || 0) * D2R);
         markOverlaps(W, pi);
       }
