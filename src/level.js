@@ -86,9 +86,16 @@ function swingPoseAt(L, pi, hi, ang) {
   sw.al = new Set(); sw.cov = new Set();
   L.holes.forEach((h, k) => {
     if (sw.holes.some(([x, y]) => Math.hypot(x - h.x, y - h.y) <= ALIGN_TOL)) { sw.al.add(k); sw.cov.add(k); }
-    else if (pointInPoly(h.x, h.y, sw.poly) || distToPoly(h.x, h.y, sw.poly) < EDGE_TOL) sw.cov.add(k);
+    else if (pointInPoly(h.x, h.y, sw.poly) || distToPoly(h.x, h.y, sw.poly) < edgeTol(L, pi, k)) sw.cov.add(k);
   });
   return sw;
+}
+// v1.7.1：位姿变化后“边缘压住”容差不超过该孔在静止位姿时离板边的距离 − 2px：
+// 紧密排列的关卡里邻板的孔本来就离板边只有几 px（静止时不算压住），摆动被挡在 ~0° 时不能突然算作压住
+// （否则那颗螺丝既固定这块板、又被这块板压住 → 死锁无解）。
+function edgeTol(L, pi, k) {
+  const p = L.plates[pi]; if (!p._rd) p._rd = L.holes.map((h, j) => p.holes.includes(j) || pointInPoly(h.x, h.y, p.poly) ? Infinity : distToPoly(h.x, h.y, p.poly));
+  return Math.max(0, Math.min(EDGE_TOL, p._rd[k] - 2));
 }
 function distToPoly(x, y, poly) { let d = 1e9; for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) { const [ax, ay] = poly[j], [bx, by] = poly[i], dx = bx - ax, dy = by - ay, t = Math.max(0, Math.min(1, ((x - ax) * dx + (y - ay) * dy) / (dx * dx + dy * dy || 1))); d = Math.min(d, Math.hypot(ax + t * dx - x, ay + t * dy - y)); } return d; }
 // 板 pi 在当前位姿下是否有自己的孔对准底板孔 hi
@@ -170,6 +177,36 @@ export function setSwingAngle(L, st, pi, ang) {
   st.swing.set(pi, L._swc.get(k));
   return settle(L, st);
 }
+// v1.7.1：通用位姿（直接取物理刚体的变换 x' = R(ang)(x−C) + C + (dx,dy)），用于：
+//  ① 逻辑同步摆动板/重新固定板实际停下的位姿（板可能先绕钉 A 摆、再被别的钉固定、又绕钉 B 摆，单一“绕原支点转角”描述不了）；
+//  ② 画面判定“哪些螺丝固定这块板”时用板的实际位姿（与逻辑同一套覆盖/对准规则，避免逻辑认为被固定而画面上已掉落）。
+export function poseFromXf(L, pi, xf) {
+  const p = L.plates[pi], c = Math.cos(xf.ang), s = Math.sin(xf.ang);
+  const T = (x, y) => { const ux = x - xf.C[0], uy = y - xf.C[1]; return [xf.C[0] + c * ux - s * uy + xf.dx, xf.C[1] + s * ux + c * uy + xf.dy]; };
+  const sw = { ang: xf.ang, dx: xf.dx, dy: xf.dy, C: xf.C, hi: xf.hi ?? -1, xf: true };
+  sw.poly = p.poly.map(([x, y]) => T(x, y)); sw.holes = p.holes.map(k => T(L.holes[k].x, L.holes[k].y));
+  sw.al = new Set(); sw.cov = new Set();
+  L.holes.forEach((h, k) => {
+    if (sw.holes.some(([x, y]) => Math.hypot(x - h.x, y - h.y) <= ALIGN_TOL)) { sw.al.add(k); sw.cov.add(k); }
+    else if (pointInPoly(h.x, h.y, sw.poly) || distToPoly(h.x, h.y, sw.poly) < edgeTol(L, pi, k)) sw.cov.add(k);
+  });
+  return sw;
+}
+// 把逻辑里板 pi 的位姿同步为物理实际位姿并结算（返回新掉落的板）
+export function setPlatePose(L, st, pi, xf) {
+  if (!st.swing) st.swing = new Map();
+  const old = st.swing.get(pi); st.swing.set(pi, poseFromXf(L, pi, { ...xf, hi: old ? old.hi : xf.hi }));
+  return settle(L, st);
+}
+// 逻辑位姿与物理位姿的最大偏差（px，按板孔/轮廓采样点）
+export function poseDiff(L, st, pi, xf) {
+  const sw = st.swing && st.swing.get(pi), p = L.plates[pi], c = Math.cos(xf.ang), s = Math.sin(xf.ang);
+  const T = (x, y) => { const ux = x - xf.C[0], uy = y - xf.C[1]; return [xf.C[0] + c * ux - s * uy + xf.dx, xf.C[1] + s * ux + c * uy + xf.dy]; };
+  const pts = p.holes.map(k => [L.holes[k].x, L.holes[k].y]).concat(p.poly.filter((_, i) => i % Math.max(1, Math.floor(p.poly.length / 8)) === 0));
+  if (!sw) return Math.max(0, ...pts.map(([x, y]) => { const w = T(x, y); return Math.hypot(w[0] - x, w[1] - y); }));
+  const R = sw.xf ? ((x, y) => { const cc = Math.cos(sw.ang), ss = Math.sin(sw.ang), ux = x - sw.C[0], uy = y - sw.C[1]; return [sw.C[0] + cc * ux - ss * uy + sw.dx, sw.C[1] + ss * ux + cc * uy + sw.dy]; }) : ((x, y) => rotPt(x, y, sw));
+  return Math.max(0, ...pts.map(([x, y]) => { const a = T(x, y), b = R(x, y); return Math.hypot(a[0] - b[0], a[1] - b[1]); }));
+}
 export function liftOut(L, st, si) { (st.lifted || (st.lifted = new Set())).add(si); return RELEASE === 'lift' ? settle(L, st) : []; }
 export function cancelLift(st, si) { if (st.lifted) st.lifted.delete(si); }
 export function applyMove(L, st, si, hi) {
@@ -250,11 +287,14 @@ export function buildRandom(o, rnd) {
     L.base.polys.push([[x0 - 24, y0 - 24], [x0 + W + 24, y0 - 24], [x0 + W + 24, y0 + H + 24], [x0 - 24, y0 + H + 24]]);
     const holeAt = (x, y) => { let i = L.holes.findIndex(h => Math.hypot(h.x - x, h.y - y) < 6); if (i < 0) { L.holes.push({ x, y }); i = L.holes.length - 1; } return i; };
     for (let layer = 0; layer < o.genLayers; layer++) {
+      const occ = new Set(); // v1.7.1：同一层的格子只能被一块板占用（以前 2 格板与下一格的板会完全叠在同一层 → 同层穿模）
       for (let r = 0; r < o.genRows; r++) for (let c = 0; c < o.genCols; c++) {
         if (rnd() > o.genDensity) continue;
         const span = rnd() < 0.35 ? 2 : 1, horiz = rnd() < 0.5;
         const cw = horiz ? span : 1, ch = horiz ? 1 : span;
         if (c + cw > o.genCols || r + ch > o.genRows) continue;
+        const cells = []; for (let dr = 0; dr < ch; dr++) for (let dc = 0; dc < cw; dc++) cells.push((r + dr) * 1000 + c + dc);
+        if (cells.some(k => occ.has(k))) continue;
         const off = layer * 0.5;
         const px = x0 + (c + off * (layer % 2)) * (o.genPlateW + o.genGap), py = y0 + (r + off * (layer % 2)) * (o.genPlateH + o.genGap);
         const pw = cw * (o.genPlateW + o.genGap) - o.genGap, ph = ch * (o.genPlateH + o.genGap) - o.genGap;
@@ -269,6 +309,7 @@ export function buildRandom(o, rnd) {
         // v1.7 修复：上层板不能盖住下层已有的孔（阻挡规则下那颗螺丝既固定上层板又被它压住 → 必然无解）
         if (L.holes.some(h => !hp.some(([x, y]) => Math.hypot(h.x - x, h.y - y) < 6) && (pointInPoly(h.x, h.y, poly) || distToPoly(h.x, h.y, poly) < 18))) continue;
         const hs = hp.map(([x, y]) => holeAt(x, y));
+        cells.forEach(k => occ.add(k));
         L.plates.push({ poly, layer, holes: [...new Set(hs)], radius: 12 });
       }
     }

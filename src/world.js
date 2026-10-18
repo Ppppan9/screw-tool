@@ -3,8 +3,7 @@
 // 状态：≥2 钉 → 静态；由多钉减到 1 钉 → 动态 + 绕钉铰接（±swingMax 限位）；0 钉 → 自由刚体下落。
 // 碰撞规则：某块板变为动态（摆动/释放）的瞬间与之重叠的板/螺丝（叠放的板，或螺丝杆在板轮廓内）记为“穿过对”，
 //   互不碰撞，直到两者分开后才恢复碰撞；其余所有对（下落-下落、下落-摆动、下落-固定、摆动-固定、板-螺丝）都碰撞。
-import { World, Vec2, Polygon, Circle, RevoluteJoint, testOverlap } from 'planck';
-import decomp from 'poly-decomp';
+import { World, Vec2, Polygon, Circle, RevoluteJoint } from 'planck';
 import { rdpClosed, polyArea, offsetPoly } from './geom.js';
 import { syncPose, toWorld, toLocal, inPoly } from './physics.js';
 
@@ -12,41 +11,66 @@ export const PX = 50; // 1 m = 50 px（Box2D 适合 0.1–10 m 的物体）
 const D2R = Math.PI / 180;
 
 // ---------- 凸分解 ----------
-function earClip(poly) {
-  const P = poly.slice(); if (polyArea(P) < 0) P.reverse(); const out = [];
-  const cross = (a, b, c) => (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]);
-  let guard = 0;
-  while (P.length > 3 && guard++ < 5000) {
-    let cut = false;
-    for (let i = 0; i < P.length; i++) {
-      const a = P[(i - 1 + P.length) % P.length], b = P[i], c = P[(i + 1) % P.length];
-      if (cross(a, b, c) <= 1e-9) continue;
-      if (P.some(q => q !== a && q !== b && q !== c && cross(a, b, q) > 0 && cross(b, c, q) > 0 && cross(c, a, q) > 0)) continue;
-      out.push([a, b, c]); P.splice(i, 1); cut = true; break;
+// v1.7.1：图形关卡的板轮廓很密（96–232 点、大量近共线点），旧的 quickDecomp/earClip 会静默失败，
+// 碰撞夹具只覆盖板面积的 1–57%（板-板穿模的根本原因）。现在：清理重复/近共线点 → 保证推进的耳切 → Hertel–Mehlhorn 合并为 ≤8 边凸块。
+const cross3 = (a, b, c) => (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]);
+function cleanPoly(poly) {
+  const P = poly.map(([x, y]) => [x, y]); if (polyArea(P) < 0) P.reverse();
+  let changed = true;
+  while (changed && P.length > 3) {
+    changed = false;
+    for (let i = 0; i < P.length && P.length > 3; i++) {
+      const n = P.length, a = P[(i - 1 + n) % n], b = P[i], c = P[(i + 1) % n], l = Math.hypot(c[0] - a[0], c[1] - a[1]) || 1;
+      if (Math.hypot(b[0] - a[0], b[1] - a[1]) < 0.25 || Math.abs(cross3(a, b, c)) / l < 0.04) { P.splice(i, 1); i--; changed = true; }
     }
-    if (!cut) break;
   }
-  if (P.length === 3) out.push(P);
-  return out;
+  return P;
 }
-function splitFan(piece, maxV = 8) {
-  if (piece.length <= maxV) return [piece];
-  const out = []; for (let i = 1; i < piece.length - 1; i += maxV - 2) out.push([piece[0], ...piece.slice(i, Math.min(piece.length, i + maxV - 1))]);
-  return out.filter(q => q.length >= 3);
+function earClipIdx(P) {
+  const idx = P.map((_, i) => i), tris = [];
+  const inTri = (p, a, b, c) => cross3(a, b, p) > 1e-9 && cross3(b, c, p) > 1e-9 && cross3(c, a, p) > 1e-9;
+  while (idx.length > 3) {
+    const n = idx.length; let pick = -1, best = -1, bestCr = -Infinity;
+    for (let k = 0; k < n; k++) {
+      const ia = idx[(k - 1 + n) % n], ib = idx[k], ic = idx[(k + 1) % n], cr = cross3(P[ia], P[ib], P[ic]);
+      if (cr > bestCr) { bestCr = cr; best = k; }
+      if (cr <= 1e-9) continue;
+      let ok = true; for (const j of idx) if (j !== ia && j !== ib && j !== ic && inTri(P[j], P[ia], P[ib], P[ic])) { ok = false; break; }
+      if (ok) { pick = k; break; }
+    }
+    if (pick < 0) pick = best; // 退化（自交/全共线）：仍然切掉最凸的顶点，保证终止
+    const ia = idx[(pick - 1 + n) % n], ib = idx[pick], ic = idx[(pick + 1) % n];
+    if (cross3(P[ia], P[ib], P[ic]) > 1e-9) tris.push([ia, ib, ic]);
+    idx.splice(pick, 1);
+  }
+  if (idx.length === 3 && cross3(P[idx[0]], P[idx[1]], P[idx[2]]) > 1e-9) tris.push(idx.slice());
+  return tris;
+}
+function isConvexIdx(P, r) { const n = r.length; for (let i = 0; i < n; i++) if (cross3(P[r[(i - 1 + n) % n]], P[r[i]], P[r[(i + 1) % n]]) < -1e-6) return false; return true; }
+function mergeHM(P, pieces, maxV = 8) {
+  let merged = true;
+  while (merged) {
+    merged = false;
+    outer: for (let a = 0; a < pieces.length; a++) for (let b = a + 1; b < pieces.length; b++) {
+      const A = pieces[a], B = pieces[b];
+      if (A.length + B.length - 2 > maxV) continue;
+      for (let i = 0; i < A.length; i++) {
+        const u = A[i], v = A[(i + 1) % A.length], j = B.indexOf(v);
+        if (j < 0 || B[(j + 1) % B.length] !== u) continue;
+        const ring = []; for (let k = 0; k < A.length; k++) ring.push(A[(i + 1 + k) % A.length]); // v … u
+        for (let k = 2; k < B.length; k++) ring.push(B[(j + k) % B.length]); // B 中 u 之后到 v 之前
+        if (!isConvexIdx(P, ring)) continue;
+        pieces[a] = ring; pieces.splice(b, 1); merged = true; break outer;
+      }
+    }
+  }
+  return pieces;
 }
 export function convexParts(poly) {
-  let p = rdpClosed(poly, 0.6).map(([x, y]) => [x, y]);
-  if (p.length < 3) p = poly.map(([x, y]) => [x, y]);
-  const A = Math.abs(polyArea(p));
-  let parts = null;
-  try {
-    const q = p.map(v => v.slice()); decomp.makeCCW(q); decomp.removeCollinearPoints(q, 0.01); decomp.removeDuplicatePoints(q, 0.01);
-    const d = decomp.quickDecomp(q);
-    const sum = d.reduce((s, c) => s + Math.abs(polyArea(c)), 0);
-    if (d.length && Math.abs(sum - A) / A < 0.03) parts = d;
-  } catch (e) { parts = null; }
-  if (!parts) parts = earClip(p);
-  return parts.flatMap(c => splitFan(c)).filter(c => Math.abs(polyArea(c)) > 0.5);
+  let p = cleanPoly(rdpClosed(poly, 0.6));
+  if (p.length < 3) p = cleanPoly(poly);
+  const P = p, tris = earClipIdx(P);
+  return mergeHM(P, tris).map(r => r.map(i => P[i])).filter(c => Math.abs(polyArea(c)) > 0.5);
 }
 
 // ---------- 世界 ----------
@@ -57,7 +81,8 @@ export function createWorld(L, bodies, S) {
   bodies.forEach((b, pi) => {
     const ins = S.ppInset ?? 1.5, parts = convexParts(ins > 0 ? offsetPoly(L.plates[pi].poly, ins) : L.plates[pi].poly), m = b.m, c0 = toWorld(b, m.cx, m.cy);
     const body = pw.createBody({ type: 'static', position: Vec2(c0[0] / PX, c0[1] / PX), angle: b.ang });
-    for (const c of parts) { try { body.createFixture(new Polygon(c.map(([x, y]) => Vec2((x - m.cx) / PX, (y - m.cy) / PX))), { density: 1, friction: S.ppFric ?? 0.4, restitution: S.ppRest ?? 0.1 }); } catch (e) { } }
+    let fa = 0; for (const c of parts) { try { body.createFixture(new Polygon(c.map(([x, y]) => Vec2((x - m.cx) / PX, (y - m.cy) / PX))), { density: 1, friction: S.ppFric ?? 0.4, restitution: S.ppRest ?? 0.1 }); fa += Math.abs(polyArea(c)); } catch (e) { } }
+    b.fixCover = fa / Math.max(1, Math.abs(polyArea(L.plates[pi].poly)));
     body.setUserData({ k: 'p', id: 'p' + pi, pi });
     W.plates.push({ body, joint: null });
   });
@@ -76,17 +101,32 @@ export function createWorld(L, bodies, S) {
   });
   return W;
 }
-// 板 pi（刚变为动态）与谁重叠 → 记为穿过对（板-板：任何重叠；板-螺丝：螺丝中心在板轮廓内=深重叠。轻微擦边由求解器温和推开）
+// 板 pi（刚变为动态）与谁重叠 → 穿过对。v1.7.1 规则：
+//  板-板：只有不同层、且两板可见轮廓真的重叠（面积 > ppPassArea px²）才穿过；同层板永不穿过（紧贴的邻板会挡住摆动/下落）。
+//  板-螺丝：只有该板自己孔里的螺丝（含摆动的支点钉、穿过它对齐孔的螺丝）穿过；其它插在底板里的螺丝都会挡住板材料。
+function worldPoly(W, pi) { const b = W.bodies[pi]; return W.L.plates[pi].poly.map(([x, y]) => toWorld(b, x, y)); }
+function bbox(P) { let a = 1e9, b = 1e9, c = -1e9, d = -1e9; for (const [x, y] of P) { if (x < a) a = x; if (y < b) b = y; if (x > c) c = x; if (y > d) d = y; } return [a, b, c, d]; }
+export function overlapArea(A, B, step = 2) {
+  const a = bbox(A), b = bbox(B), x0 = Math.max(a[0], b[0]), y0 = Math.max(a[1], b[1]), x1 = Math.min(a[2], b[2]), y1 = Math.min(a[3], b[3]);
+  if (x0 >= x1 || y0 >= y1) return 0;
+  let n = 0; for (let y = y0 + step / 2; y < y1; y += step) for (let x = x0 + step / 2; x < x1; x += step) if (inPoly(x, y, A) && inPoly(x, y, B)) n++;
+  return n * step * step;
+}
+function ownHole(W, pi, x, y) { const b = W.bodies[pi]; return (b.holes || []).some(([hx, hy]) => { const w = toWorld(b, hx, hy); return Math.hypot(w[0] - x, w[1] - y) < (W.S.ownHoleTol ?? 9); }); }
 function markOverlaps(W, pi) {
-  const me = W.plates[pi].body, b = W.bodies[pi], xf = me.getTransform();
-  const ov = (o) => { for (let fa = me.getFixtureList(); fa; fa = fa.getNext()) for (let fb = o.getFixtureList(); fb; fb = fb.getNext()) if (testOverlap(fa.getShape(), 0, fb.getShape(), 0, xf, o.getTransform())) return true; return false; };
-  W.plates.forEach((q, pj) => { if (pj === pi || !q.body || W.bodies[pj].s === 'gone') return; if (ov(q.body)) W.pass.set(key('p' + pi, 'p' + pj), W.steps); });
-  W.screws.forEach((sb, id) => { const p = sb.getPosition(), [lx, ly] = toLocal(b, p.x * PX, p.y * PX); if (inPoly(lx, ly, W.L.plates[pi].poly) && ov(sb)) W.pass.set(key('p' + pi, 's' + id), W.steps); });
+  const me = W.plates[pi].body, lay = W.L.plates[pi].layer || 0, P = worldPoly(W, pi), thr = W.S.ppPassArea ?? 40;
+  W.plates.forEach((q, pj) => {
+    if (pj === pi || !q.body || W.bodies[pj].s === 'gone') return;
+    if ((W.L.plates[pj].layer || 0) === lay) return;
+    if (overlapArea(P, worldPoly(W, pj)) > thr) W.pass.set(key('p' + pi, 'p' + pj), W.steps);
+  });
+  void me;
+  W.screws.forEach((sb, id) => { const p = sb.getPosition(); if (ownHole(W, pi, p.x * PX, p.y * PX)) W.pass.set(key('p' + pi, 's' + id), W.steps); });
 }
 // 新出现的螺丝（落座）与正在动的板深重叠 → 穿过对（例如螺丝拧进摆动板错位的孔下方：随后它会把板固定）
 function screwOverlaps(W, id, sb) {
   const p = sb.getPosition();
-  W.plates.forEach((q, pi) => { const b = W.bodies[pi]; if (!q.body || (b.s !== 'swing' && b.s !== 'fall')) return; const [lx, ly] = toLocal(b, p.x * PX, p.y * PX); if (inPoly(lx, ly, W.L.plates[pi].poly)) W.pass.set(key('p' + pi, 's' + id), W.steps); });
+  W.plates.forEach((q, pi) => { const b = W.bodies[pi]; if (!q.body || (b.s !== 'swing' && b.s !== 'fall')) return; const [lx, ly] = toLocal(b, p.x * PX, p.y * PX); if (ownHole(W, pi, p.x * PX, p.y * PX) || inPoly(lx, ly, W.L.plates[pi].poly)) W.pass.set(key('p' + pi, 's' + id), W.steps); });
 }
 function syncScrews(W, obst, S) {
   const seen = new Set(), r = (S.collShaftR ?? 6) / PX;

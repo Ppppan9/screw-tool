@@ -1,7 +1,7 @@
 import { levelFromImage, defaultShapeCanvas } from './shapegen.js';
 import { newBody, toWorld as bodyToWorld } from './physics.js';
 import { createWorld, stepWorld, swingMoving } from './world.js';
-import { referenceLevel, generateLevel, initState, holeUsable, screwFree, applyMove, pickHole, solve, done, setBlocking, platePins, coverInfo, liftOut, cancelLift, setPhysicsRules, setSwingAngle, pointInPoly, ALIGN_TOL, EDGE_TOL } from './level.js';
+import { referenceLevel, generateLevel, initState, holeUsable, screwFree, applyMove, pickHole, solve, done, setBlocking, platePins, coverInfo, liftOut, cancelLift, setPhysicsRules, setSwingAngle, poseFromXf, setPlatePose, poseDiff, pointInPoly, ALIGN_TOL, EDGE_TOL } from './level.js';
 import { toLocal as bodyToLocal } from './physics.js';
 import { GROUPS, DEFS, loadSettings, saveSettings, migrate, exportJSON } from './settings.js';
 import { drawBackground, drawBase, plateSprite, drawHole, drawScrew } from './render.js';
@@ -133,14 +133,17 @@ function step(t, dt) {
     }
   });
   pend = pend.filter(q => { if (t >= q.t) { vHole[q.si] = q.hi; return false; } return true; });
-  const vst = { screwHole: vHole, removed: st.removed, lifted: null };
+  // v1.7.1：画面上不在静止位姿的板（摆动中/摆动后被重新固定）按物理实际位姿判定被哪些螺丝固定——与逻辑同一套覆盖/对准规则
+  const vsw = new Map(); plateVis.forEach((b, pi) => { if ((b.s === 'swing' || b.s === 'on') && b.posed && (Math.abs(b.ang) > 1e-4 || Math.abs(b.dx) > 0.05 || Math.abs(b.dy) > 0.05)) { const k = b.ang.toFixed(4) + ',' + b.dx.toFixed(2) + ',' + b.dy.toFixed(2); if (b._pk !== k) { b._pk = k; b._pose = poseFromXf(L, pi, b); } vsw.set(pi, b._pose); } });
+  const vst = { screwHole: vHole, removed: st.removed, lifted: null, swing: vsw };
   const pinsOf = L.plates.map((_, pi) => platePins(L, vst, pi));
   // v1.6/v1.7：仍插在底板里的螺丝（含正在拧入/放回的）是板的障碍；拧起/悬停/飞行中的不算
   const obst = []; st.screwHole.forEach((h, si) => { const a = screwVis[si].anim; if (h < 0 || (a && (a.k === 'lift' || a.k === 'hover' || a.k === 'fly'))) return; const w = holeWorld(h); obst.push({ id: si, x: w[0], y: w[1] }); });
   const evs = stepWorld(world, pinsOf.map(p => p.length), pinsOf.map(p => p.length === 1 ? holeWorld(vHole[p[0]]) : null), Math.min(dt, 0.05), S, obst);
   evs.forEach(ev => { if (ev === 'fall') sfx.fall(S); });
   // v1.7：摆动板静止后，逻辑位姿同步为物理实际停下的角度（被其它板/螺丝挡住时 < swingMax）
-  plateVis.forEach((b, pi) => { const sw = st.swing.get(pi); if (b.s === 'swing' && b.settled && sw && Math.abs(b.ang - sw.ang) > 0.5 * Math.PI / 180) setSwingAngle(L, st, pi, b.ang); });
+  // v1.7.1：板静止后（摆动停下、或被重新固定）逻辑位姿同步为物理实际位姿（通用刚体变换，不再假设绕原支点转）
+  plateVis.forEach((b, pi) => { if (st.removed.has(pi) || !st.swing.has(pi)) return; if (((b.s === 'swing' && b.settled) || b.s === 'on') && poseDiff(L, st, pi, b) > 0.8) setPlatePose(L, st, pi, b); });
   if (!finishedAt && done(L, st) && plateVis.every(p => p.s === 'gone')) { finishedAt = t; onFinish(); }
 }
 const busy = () => screwVis.some(v => v.anim && v.anim.k !== 'hover');
@@ -449,6 +452,6 @@ document.getElementById('btnExport').onclick = () => { const a = document.create
 document.getElementById('btnImport').onclick = () => document.getElementById('importFile').click();
 document.getElementById('importFile').onchange = (e) => { const f = e.target.files[0]; if (!f) return; f.text().then(t => { S = migrate(JSON.parse(t)); saveSettings(S); buildPanel(); loadHand(); sfx.setBgm(S.bgm, S.bgmVol); newGame(); toast('已导入设置'); }).catch(() => toast('导入失败')); };
 document.getElementById('btnReset').onclick = () => { if (!confirm('恢复全部默认设置？')) return; S = { ...DEFS }; saveSettings(S); buildPanel(); loadHand(); newGame(); };
-window.__game = { holeWorld: (hi) => holeWorld(hi), holeTargetable: (hi) => holeTargetable(hi), visBlocked: (hi) => visBlocked(hi), view: () => view(), tapXY: (x, y) => { const v = view(); return tapAt(x * v.b + v.tx, y * v.b + v.ty); }, tapHole: (hi) => { const w = holeWorld(hi), v = view(); return tapAt(w[0] * v.b + v.tx, w[1] * v.b + v.ty); }, get vHole() { return vHole; }, doExportAE, doExport3D, aeRec, aeStart: () => recStart(), aeStop: () => aeStop(), aeActive: () => aeActive(), get aeLastRec() { return aeLastRec; }, get mediaRec() { return rec; }, autoSolve, newGame, get S() { return S; }, set(k, v) { S[k] = v; applyChange(k); buildPanel(); }, get st() { return st; }, get L() { return L; }, get plateVis() { return plateVis; }, get world() { return world; }, solveNow: () => solve(L, st), physBusy: () => physBusy(), get screwVis() { return screwVis; }, startRec, stopRec };
+window.__game = { holeWorld: (hi) => holeWorld(hi), holeTargetable: (hi) => holeTargetable(hi), visBlocked: (hi) => visBlocked(hi), view: () => view(), tapXY: (x, y) => { const v = view(); return tapAt(x * v.b + v.tx, y * v.b + v.ty); }, tapHole: (hi) => { const w = holeWorld(hi), v = view(); return tapAt(w[0] * v.b + v.tx, w[1] * v.b + v.ty); }, get vHole() { return vHole; }, doExportAE, doExport3D, aeRec, aeStart: () => recStart(), aeStop: () => aeStop(), aeActive: () => aeActive(), get aeLastRec() { return aeLastRec; }, get mediaRec() { return rec; }, autoSolve, newGame, get S() { return S; }, set(k, v) { S[k] = v; applyChange(k); buildPanel(); }, get st() { return st; }, get L() { return L; }, get plateVis() { return plateVis; }, get world() { return world; }, solveNow: () => solve(L, st), lvl: { screwFree, holeUsable, platePins, solve }, physBusy: () => physBusy(), get screwVis() { return screwVis; }, startRec, stopRec };
 buildPanel(); loadHand(); newGame(); if (S.bgm) sfx.setBgm(S.bgm, S.bgmVol);
 requestAnimationFrame(loop);

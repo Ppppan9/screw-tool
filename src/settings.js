@@ -1,5 +1,5 @@
 // 设置定义：所有可调参数。版本号 + 迁移。
-export const SETTINGS_VERSION = 11;
+export const SETTINGS_VERSION = 12;
 export const STORE_KEY = 'screwTool.settings';
 // [key, 标签, 类型, 默认, min, max, step]  类型: range/color/bool/select/text/file
 export const GROUPS = [
@@ -120,7 +120,8 @@ export const GROUPS = [
     ['plateCollide', '板与板碰撞（下落/摆动的板撞到其它板）', 'bool', true],
     ['ppRest', '板与板碰撞弹性（恢复系数）', 'range', 0.1, 0, 1, 0.05],
     ['ppFric', '板与板摩擦系数', 'range', 0.4, 0, 1.5, 0.05],
-    ['ppInset', '碰撞轮廓内缩(px，描边/细缝容差)', 'range', 1.5, 0, 6, 0.1],
+    ['ppInset', '碰撞轮廓内缩(px，越大同层板越会互相压住边)', 'range', 0.5, 0, 6, 0.1],
+    ['ppPassArea', '不同层板重叠超过此面积(px²)才互相穿过（同层板永不穿过）', 'range', 40, 0, 2000, 10],
     ['angDamp', '下落角阻尼(1/s，抑制撞击后快速旋转)', 'range', 1.5, 0, 10, 0.1],
     ['collStuckMs', '卡住判定(ms，下落板这么久没往下走就穿过障碍)', 'range', 1200, 300, 8000, 100],
   ]],
@@ -234,6 +235,8 @@ export function migrate(obj) {
   if (v < 10) v = 10;
   // v10 -> v11（v1.7 板与板碰撞）：collMaxMs（碰撞超时）由 collStuckMs（卡住判定）取代；其余新增键只补默认
   if (v < 11) { delete s.collMaxMs; v = 11; }
+  // v11 -> v12（v1.7.1 同层板不穿模）：ppInset 旧默认 1.5 → 0.5；新增 ppPassArea 只补默认
+  if (v < 12) { if (s.ppInset === 1.5) delete s.ppInset; v = 12; }
   const out = { ...DEFS };
   for (const k in DEFS) if (k in s && typeof s[k] === typeof DEFS[k]) out[k] = s[k];
   return out;
