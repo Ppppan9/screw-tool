@@ -78,7 +78,7 @@ const PARTS = new WeakMap(); // 板 → { inset: 凸块 }（求解器每次预�
 function partsOf(pl, ins) { let m = PARTS.get(pl); if (!m) PARTS.set(pl, m = {}); return m[ins] || (m[ins] = convexParts(ins > 0 ? offsetPoly(pl.poly, ins) : pl.poly)); }
 const key = (a, b) => a < b ? a + '|' + b : b + '|' + a;
 export function createWorld(L, bodies, S) {
-  const pw = new World({ gravity: Vec2(0, (S.gravity || 3600) / PX), allowSleep: false }); // v1.7.2：不休眠——被托住的板在支撑移走后必须立即下落
+  const pw = new World({ gravity: Vec2(0, (S.gravity || 3600) / PX), allowSleep: false, continuousPhysics: false }); // 固定 1/120s 步长下板（≥30px）不会一步穿过螺丝杆，关闭 TOI 省时 // v1.7.2：不休眠——被托住的板在支撑移走后必须立即下落
   const W = { pw, L, S, bodies, ground: pw.createBody(), plates: [], screws: new Map(), pass: new Map(), steps: 0 };
   bodies.forEach((b, pi) => {
     const ins = S.ppInset ?? 1.5, parts = partsOf(L.plates[pi], ins), m = b.m, c0 = toWorld(b, m.cx, m.cy);
@@ -131,6 +131,7 @@ function screwOverlaps(W, id, sb) {
   W.plates.forEach((q, pi) => { const b = W.bodies[pi]; if (!q.body || (b.s !== 'swing' && b.s !== 'fall')) return; const [lx, ly] = toLocal(b, p.x * PX, p.y * PX); if (ownHole(W, pi, p.x * PX, p.y * PX) || inPoly(lx, ly, W.L.plates[pi].poly)) W.pass.set(key('p' + pi, 's' + id), W.steps); });
 }
 function syncScrews(W, obst, S, restoring) {
+  const sk = obst.map(o => o.id + ':' + o.x + ',' + o.y).join(';') + '|' + (S.collShaftR ?? 6); if (W._sk === sk) return; W._sk = sk;
   const seen = new Set(), r = (S.collShaftR ?? 6) / PX;
   for (const o of obst) {
     seen.add(o.id); let sb = W.screws.get(o.id);
@@ -202,7 +203,7 @@ export function stepFixed(W, S) {
     // 参考里的摆比真实物理摆更快：额外力矩 (boost−1)·m·g·rx（绕铰点等效角加速度 = boost · g · rx / (k2 + r²)）
     body.applyTorque(((S.swingBoost || 1) - 1) * body.getMass() * g * rx, true);
   });
-  W.pw.step(h, 8, 3); W.steps++;
+  W.pw.step(h, 6, 2); W.steps++;
   W.bodies.forEach((b, pi) => {
     const q = W.plates[pi], body = q.body; if (!body || b.s === 'gone' || b.s === 'on') return;
     const p = body.getPosition(); b.cx = p.x * PX; b.cy = p.y * PX; b.ang = body.getAngle(); b.om = body.getAngularVelocity(); syncPose(b);

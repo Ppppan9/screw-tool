@@ -353,12 +353,12 @@ let VALIDATE = (L, S, ms, n) => !!solve(L, initState(L), n || 6000);
 export function setValidator(f) { VALIDATE = f; }
 export function validate(L, S, ms, n) { return VALIDATE(L, S, ms, n); }
 export function generateLevel(o, seed) {
-  for (let tries = 0; tries < 60; tries++) {
-    // v1.7.2：落点预测下可能无解 → 每 6 次失败多加 1 个空孔（同图形关卡）
-    const L = buildRandom({ ...o, emptyHoles: (o.emptyHoles || 2) + Math.floor(tries / 6) }, mulberry(seed + tries * 7919)); if (!L) continue;
+  for (let tries = 0; tries < 30; tries++) {
+    // v1.7.2：物理预测求解（有时间预算 genSolveMs）失败 → 每次失败多加 1 个空孔；只接受求解成功的关卡
+    const L = buildRandom({ ...o, emptyHoles: (o.emptyHoles || 2) + tries }, mulberry(seed + tries * 7919)); if (!L) continue;
     L.attempts = tries + 1;
     const st = initState(L);
-    if (VALIDATE(L, o, o.genSolveMs ?? 2500, 6000)) return L;
+    if (VALIDATE(L, o, o.genSolveMs ?? 4000, 6000)) return L;
   }
   return referenceLevel();
 }

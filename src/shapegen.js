@@ -59,9 +59,9 @@ function partitioner(S, rnd, inside, area, layer) {
 // 主函数：img 为已加载的 Image/Canvas
 export function levelFromImage(img, S, seed0) {
   for (let attempt = 0; attempt < 24; attempt++) {
-    const L = buildOnce(img, S, seed0 + attempt * 977, Math.floor(attempt / 4));
+    const L = buildOnce(img, S, seed0 + attempt * 977, Math.floor(attempt / 2));
     if (!L) break;
-    if (L.plates.length && validate(L, S, S.genSolveMs ?? 2500, 12000)) { L.seed = seed0 + attempt * 977; L.attempts = attempt + 1; return L; }
+    if (L.plates.length && validate(L, S, S.genSolveMs ?? 4000, 12000)) { L.seed = seed0 + attempt * 977; L.attempts = attempt + 1; return L; }
   }
   const R = referenceLevel(); R.name = 'reference(fallback)'; return R;
 }

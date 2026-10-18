@@ -11,7 +11,7 @@ export const LIVE_CAP = 6;     // 实时：6s 还不静止 → 强制冻结（�
 const hxy = (L, h) => [L.holes[h].x, L.holes[h].y];
 function bboxC(P) { let a = 1e9, b = 1e9, c = -1e9, d = -1e9; for (const [x, y] of P) { a = Math.min(a, x); b = Math.min(b, y); c = Math.max(c, x); d = Math.max(d, y); } return [(a + c) / 2, (b + d) / 2]; }
 export function templateBodies(L) { return L.plates.map(p => newBody(p.poly, p._C || bboxC(p.poly), p.holes.map(h => hxy(L, h)))); }
-function obstOf(sim) { const o = []; sim.vHole.forEach((h, si) => { if (h >= 0) o.push({ id: si, x: sim.L.holes[h].x, y: sim.L.holes[h].y }); }); return o; }
+function obstOf(sim) { const k = sim.vHole.join(','); if (sim._obK === k) return sim._ob; sim._obK = k; const o = sim._ob = []; sim.vHole.forEach((h, si) => { if (h >= 0) o.push({ id: si, x: sim.L.holes[h].x, y: sim.L.holes[h].y }); }); return o; }
 function poseKey(b) { return b.ang.toFixed(4) + ',' + b.dx.toFixed(2) + ',' + b.dy.toFixed(2); }
 function isPosed(b) { return b.posed && (Math.abs(b.ang) > 1e-4 || Math.abs(b.dx) > 0.05 || Math.abs(b.dy) > 0.05); }
 function poseOf(L, b, pi) { const k = poseKey(b); if (b._pk !== k) { b._pk = k; b._pose = poseFromXf(L, pi, b); } return b._pose; }
@@ -33,8 +33,13 @@ export function createSim(L, S, bodies) {
 }
 function freeze(sim) { sim.frozen = true; sim.snap = makeSnap(sim); }
 export function forceFreeze(sim) { if (!sim.frozen) freeze(sim); }
+function pinsCached(sim) {
+  const k = sim.vHole.join(',') + '|' + sim.bodies.map(b => (b.s === 'on' || b.s === 'swing') && isPosed(b) ? poseKey(b) : b.s[0]).join(';');
+  if (sim._pinK !== k) { sim._pinK = k; sim._pins = pinsOf(sim.L, sim.bodies, sim.vHole); }
+  return sim._pins;
+}
 export function simTick(sim) {
-  const { L, S, W } = sim, pins = pinsOf(L, sim.bodies, sim.vHole);
+  const { L, S, W } = sim, pins = pinsCached(sim);
   const ev = applyPins(W, pins.map(p => p.length), pinWOf(L, pins, sim.vHole), S, obstOf(sim));
   stepFixed(W, S).forEach((e, i) => { if (e) ev[i] = e; });
   sim.t += DT; sim.ticks++;
