@@ -47,7 +47,7 @@ export function referenceLevel() {
   return { plates, holes, screws, base, name: 'reference' };
 }
 
-// v1.8 经典款（大脚掌）：tools/trace_bigfoot.py 从朋友圈广告截图分割（src/bigfoot_trace.json，22 块板 25 颗螺丝，脚跟板上 1 个空孔）
+// v1.8 经典款（大脚掌）：tools/trace_bigfoot.py 从朋友圈广告截图分割（src/bigfoot_trace.json，21 块板 25 颗螺丝，脚跟板上 1 个空孔）
 // 板的 holes 里可以有不带螺丝的孔（脚跟板的黑色空孔 = 板孔对准底板孔）；FOOT_HIDDEN = 被板盖住的额外底孔（仅在求解需要时添加）
 export const FOOT_HIDDEN = [[372, 1042]]; // 米色脚跟板下 1 个隐藏底孔：无它时 solvePhys 150s 无解；有它 41 步 3s
 export function bigfootLevel(hidden = FOOT_HIDDEN) {
