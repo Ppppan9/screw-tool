@@ -1,11 +1,12 @@
 import { levelFromImage, defaultShapeCanvas, buildOnce } from './shapegen.js';
 import { newBody, toWorld as bodyToWorld } from './physics.js';
 import { genStats, createSim, simTick, simEvent, stateFromBodies, visBlockedBy, solvePhys, forceFreeze, DT, LIVE_CAP } from './sim.js';
-import { referenceLevel, generateLevel, initState, holeUsable, screwFree, applyMove, pickHole, solve, done, setBlocking, platePins, coverInfo, liftOut, cancelLift, setPhysicsRules, setSwingAngle, poseFromXf, setPlatePose, poseDiff, setRest, clearRest, setShaftR, pointInPoly, ALIGN_TOL, EDGE_TOL } from './level.js';
+import { referenceLevel, bigfootLevel, generateLevel, initState, holeUsable, screwFree, applyMove, pickHole, solve, done, setBlocking, platePins, coverInfo, liftOut, cancelLift, setPhysicsRules, setSwingAngle, poseFromXf, setPlatePose, poseDiff, setRest, clearRest, setShaftR, pointInPoly, ALIGN_TOL, EDGE_TOL } from './level.js';
 import { toLocal as bodyToLocal } from './physics.js';
 import { GROUPS, DEFS, loadSettings, saveSettings, migrate, exportJSON } from './settings.js';
 import { drawBackground, drawBase, plateSprite, drawHole, drawScrew } from './render.js';
 import { Sfx } from './audio.js';
+import { THEMES, THEME_KEYS, themeDefaults } from './themes.js';
 import BG_REF from './bg_ref.jpg';
 import { createAERecorder } from './ae/recorder.js';
 import { export3D } from './export3d/export3d.js';
@@ -39,16 +40,18 @@ function imageLevel() {
   if (!S.shapeImg) return levelFromImage(defaultShapeCanvas(), S, S.shapeSeed);
   if (shapeCache.src !== S.shapeImg) { shapeCache.src = S.shapeImg; shapeCache.img = null; const im = new Image(); im.onload = () => { if (shapeCache.src === im.src || shapeCache.src === S.shapeImg) { shapeCache.img = im; newGameUI(); } }; im.src = S.shapeImg; }
   // v1.7.3：图片还在加载 → 不先生成默认图形关卡（以前要多花一整轮生成时间），保留当前关卡，加载完成后 newGame
-  if (!shapeCache.img) return L ? null : referenceLevel();
+  if (!shapeCache.img) return L ? null : themeLevel();
   return levelFromImage(shapeCache.img, S, S.shapeSeed);
 }
+// v1.8：参考关卡随主题（手掌款 = 手掌，经典款 = 大脚掌）
+function themeLevel() { return (THEMES[S.theme] || THEMES.palm).level === 'bigfoot' ? bigfootLevel() : referenceLevel(); }
 let genToken = 0;
 function newGame() {
   genToken++;
   setBlocking(S.screwBlock); setPhysicsRules({ swingMax: S.swingMax, releaseAt: S.releaseAt }); setShaftR(S.collShaftR ?? 6);
   autoToken++; autoRunning = false; updAutoBtn();
   const t0 = performance.now();
-  const Lnew = S.level === 'random' ? generateLevel(S, S.seed) : S.level === 'image' ? imageLevel() : referenceLevel();
+  const Lnew = S.level === 'random' ? generateLevel(S, S.seed) : S.level === 'image' ? imageLevel() : themeLevel();
   if (!Lnew) return;
   startLevel(Lnew);
   const ms = performance.now() - t0; if (genBusy) { genBusy = false; toastHide(); } if (ms > 1500 && S.level !== 'reference') toast(`关卡已生成（${(ms / 1000).toFixed(1)}s${Lnew.attempts ? '，尝试 ' + Lnew.attempts + ' 次' : ''}）`);
@@ -66,7 +69,8 @@ function startLevel(Lnew) {
   L = Lnew;
   st = initState(L); active = null; lastVacated = -1; finishedAt = 0; endShownAt = 0;
   plateVis = null; vHole = st.screwHole.slice(); pend = [];
-  screwVis = L.screws.map((s, i) => ({ ang: (i * 1.7) % (Math.PI / 2) - 0.3, lift: 0, sc: 1, x: 0, y: 0, anim: null }));
+  screwVis = L.screws.map((s, i) => ({ ang: S.screwStyle === 'chrome' ? ((i * 0.37) % 0.36) - 0.18 : (i * 1.7) % (Math.PI / 2) - 0.3, // 经典款参考里十字基本正放（±10°）
+    lift: 0, sc: 1, x: 0, y: 0, anim: null }));
   rebuild();
   // v1.4.2：与麻将工具一致——打开页面/重新开始/自动通关都不再自动开始 AE 记录。
   // 记录中重新开局：记录保持进行（按钮继续计时），时间轴从新关卡重新开始（AE 工程只描述一个关卡）
@@ -395,7 +399,21 @@ function aeStop() { const r = aeRec.rec; recClosed = true; updateAEButtons(); if
 async function aeStopAndExport() { const r = aeStop(); if (!r) { toast('没有记录到内容'); return null; } return doExportAE(true, r); }
 const curRec = () => aeActive() ? aeRec.rec : aeLastRec && aeLastRec.L === L ? aeLastRec : null; // 最近记录只对同一关卡有效（素材按当前关卡渲染）
 function updateAEButtons() { const b = document.getElementById('btn_aeToggle'); if (!b) return; b.textContent = aeActive() ? `■ 停止并导出（${((now() - (aeRec.rec.t0 || now())) / 1000).toFixed(1)}s）` : '● 开始记录'; b.classList.toggle('on', aeActive()); }
-const PANEL_ACTIONS = { aeToggle: () => aeActive() ? aeStopAndExport() : recStart(), aeExport: () => doExportAE(), export3d: () => doExport3D() };
+// ---------- 主题切换（v1.8，同麻将工具）：先把当前主题下用户改过的外观存进 themeStore，再套用新主题默认值 + 该主题之前的改动 ----------
+function themeDiff(id) { const d = themeDefaults(DEFS, id), o = {}; for (const k of THEME_KEYS) if (JSON.stringify(S[k]) !== JSON.stringify(d[k])) o[k] = S[k]; return o; }
+function setTheme(id, from) {
+  if (!THEMES[id]) id = 'palm';
+  const old = THEMES[from] ? from : 'palm';
+  if (id !== old) { S.themeStore = { ...(S.themeStore || {}), [old]: themeDiff(old) }; Object.assign(S, themeDefaults(DEFS, id), S.themeStore[id] || {}); }
+  S.theme = id; refreshTheme();
+}
+function resetTheme() {
+  Object.assign(S, themeDefaults(DEFS, S.theme)); S.themeStore = { ...(S.themeStore || {}) }; delete S.themeStore[S.theme];
+  refreshTheme(); toast('已恢复「' + THEMES[S.theme].name + '」主题默认外观');
+}
+// 参考关卡随主题换关；随机/图形关卡保留当前关卡，只换材质（板块贴图/螺丝/孔/底板/背景重画）
+function refreshTheme() { saveSettings(S); buildPanel(); if (S.level === 'reference') newGame(); else rebuild(); }
+const PANEL_ACTIONS = { resetTheme, aeToggle: () => aeActive() ? aeStopAndExport() : recStart(), aeExport: () => doExportAE(), export3d: () => doExport3D() };
 function recTailDone(t) { return finishedAt && t - finishedAt > (S.endCard ? S.endDelay + 400 : 0) + Math.max(800, S.tailSec * 1000); }
 function download(blob, name) { const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; a.textContent = `⬇ ${name} (${(blob.size / 1e6).toFixed(1)}MB)`; document.getElementById('recList').prepend(a); a.click(); }
 async function doExportAE(save = true, rec = curRec()) {
@@ -422,8 +440,9 @@ function loop(t) {
 }
 
 // ---------- 设置面板 ----------
-const REBUILD_KEYS = /^(canvas|bg|leaf|base|plate|outline|board)/, NEWGAME_KEYS = /^(level|seed|emptyHoles|screwsPerPlate|gen|screwBlock|shape|part|seamW|edgeInset|minPlateArea|img|screwEdgeMin|layerOverlap|plateSize|plateCount|plateTint|baseFill)/;
-function applyChange(k) {
+const REBUILD_KEYS = /^(canvas|bg|leaf|base|plate|outline|board|silk|linen|edgeHalo)/, NEWGAME_KEYS = /^(level|seed|emptyHoles|screwsPerPlate|gen|screwBlock|shape|part|seamW|edgeInset|minPlateArea|img|screwEdgeMin|layerOverlap|plateSize|plateCount|plateTint|baseFill)/;
+function applyChange(k, prev) {
+  if (k === 'theme') return setTheme(S.theme, prev);
   if (k === 'shapeImg' && S.shapeImg) S.level = 'image';
   saveSettings(S); setPhysicsRules({ swingMax: S.swingMax, releaseAt: S.releaseAt });
   if (NEWGAME_KEYS.test(k)) newGameUI(); else if (REBUILD_KEYS.test(k)) rebuild();
@@ -445,7 +464,7 @@ function buildPanel() {
         row.append(r, n); r.dataset.k = k;
       } else if (type === 'color') { const c = document.createElement('input'); c.type = 'color'; c.value = S[k]; c.oninput = () => { S[k] = c.value; applyChange(k); }; row.append(c); }
       else if (type === 'bool') { row.classList.add('t-switch'); const l = document.createElement('label'); l.className = 'switch'; l.innerHTML = `<input type="checkbox" class="switch-input" ${S[k] ? 'checked' : ''}><span class="slider"></span>`; l.querySelector('input').onchange = (e) => { S[k] = e.target.checked; applyChange(k); }; row.append(l); }
-      else if (type === 'select') { const s = document.createElement('select'); a.forEach(([v, t]) => { const o = document.createElement('option'); o.value = v; o.textContent = t; s.append(o); }); s.value = S[k]; s.onchange = () => { S[k] = s.value; applyChange(k); }; row.append(s); }
+      else if (type === 'select') { const s = document.createElement('select'); a.forEach(([v, t]) => { const o = document.createElement('option'); o.value = v; o.textContent = t; s.append(o); }); s.value = S[k]; s.onchange = () => { const prev = S[k]; S[k] = s.value; applyChange(k, prev); }; row.append(s); }
       else if (type === 'text') { const t = document.createElement('input'); t.type = 'text'; t.value = S[k]; t.oninput = () => { S[k] = t.value; applyChange(k); }; row.append(t); }
       else if (type === 'button') { row.classList.add('t-btn'); const bt = document.createElement('button'); bt.id = 'btn' + k; bt.textContent = a; bt.onclick = () => Promise.resolve(PANEL_ACTIONS[def] && PANEL_ACTIONS[def]()).catch(e => { status('导出失败：' + e.message); console.error(e); }); row.append(bt); }
       else if (type === 'file') {
@@ -472,8 +491,8 @@ document.getElementById('btnShot').onclick = () => { const a = document.createEl
 document.getElementById('btnExport').onclick = () => { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([exportJSON(S)], { type: 'application/json' })); a.download = 'screw-tool-settings.json'; a.click(); };
 document.getElementById('btnImport').onclick = () => document.getElementById('importFile').click();
 document.getElementById('importFile').onchange = (e) => { const f = e.target.files[0]; if (!f) return; f.text().then(t => { S = migrate(JSON.parse(t)); saveSettings(S); buildPanel(); loadHand(); sfx.setBgm(S.bgm, S.bgmVol); newGame(); toast('已导入设置'); }).catch(() => toast('导入失败')); };
-document.getElementById('btnReset').onclick = () => { if (!confirm('恢复全部默认设置？')) return; S = { ...DEFS }; saveSettings(S); buildPanel(); loadHand(); newGame(); };
+document.getElementById('btnReset').onclick = () => { if (!confirm('恢复全部默认设置？')) return; S = { ...DEFS, ...themeDefaults(DEFS, S.theme), theme: S.theme, themeStore: {} }; saveSettings(S); buildPanel(); loadHand(); newGame(); }; // 恢复默认 = 当前主题的默认值（不切回手掌款），清空各主题保存的外观改动
 globalThis.__genStats = genStats;
-window.__game = { buildOnce: (img, o, seed, ex) => buildOnce(img, o, seed, ex), levelFromImage: (img, o, seed) => levelFromImage(img, o || S, seed ?? S.shapeSeed), holeWorld: (hi) => holeWorld(hi), holeTargetable: (hi) => holeTargetable(hi), visBlocked: (hi) => visBlocked(hi), view: () => view(), tapXY: (x, y) => { const v = view(); return tapAt(x * v.b + v.tx, y * v.b + v.ty); }, tapHole: (hi) => { const w = holeWorld(hi), v = view(); return tapAt(w[0] * v.b + v.tx, w[1] * v.b + v.ty); }, get vHole() { return vHole; }, doExportAE, doExport3D, aeRec, aeStart: () => recStart(), aeStop: () => aeStop(), aeActive: () => aeActive(), get aeLastRec() { return aeLastRec; }, get mediaRec() { return rec; }, autoSolve, newGame, loadLevel: (Lnew) => { autoToken++; autoRunning = false; updAutoBtn(); startLevel(Lnew); }, get S() { return S; }, set(k, v) { S[k] = v; applyChange(k); buildPanel(); }, get st() { return st; }, get L() { return L; }, get plateVis() { return plateVis; }, get world() { return sim && sim.W; }, get sim() { return sim; }, solveNow: (o) => solvePhys(L, S, sim.snap, o || {}), lvl: { screwFree, holeUsable, platePins, solve }, physBusy: () => physBusy(), get screwVis() { return screwVis; }, startRec, stopRec };
+window.__game = { buildOnce: (img, o, seed, ex) => buildOnce(img, o, seed, ex), levelFromImage: (img, o, seed) => levelFromImage(img, o || S, seed ?? S.shapeSeed), holeWorld: (hi) => holeWorld(hi), holeTargetable: (hi) => holeTargetable(hi), visBlocked: (hi) => visBlocked(hi), view: () => view(), tapXY: (x, y) => { const v = view(); return tapAt(x * v.b + v.tx, y * v.b + v.ty); }, tapHole: (hi) => { const w = holeWorld(hi), v = view(); return tapAt(w[0] * v.b + v.tx, w[1] * v.b + v.ty); }, get vHole() { return vHole; }, doExportAE, doExport3D, aeRec, aeStart: () => recStart(), aeStop: () => aeStop(), aeActive: () => aeActive(), get aeLastRec() { return aeLastRec; }, get mediaRec() { return rec; }, autoSolve, newGame, loadLevel: (Lnew) => { autoToken++; autoRunning = false; updAutoBtn(); startLevel(Lnew); }, get S() { return S; }, set(k, v) { const prev = S[k]; S[k] = v; applyChange(k, prev); buildPanel(); }, setTheme: (id) => setTheme(id, S.theme), themes: THEMES, get st() { return st; }, get L() { return L; }, get plateVis() { return plateVis; }, get world() { return sim && sim.W; }, get sim() { return sim; }, solveNow: (o) => solvePhys(L, S, sim.snap, o || {}), lvl: { screwFree, holeUsable, platePins, solve }, physBusy: () => physBusy(), get screwVis() { return screwVis; }, startRec, stopRec };
 buildPanel(); loadHand(); newGame(); if (S.bgm) sfx.setBgm(S.bgm, S.bgmVol);
 requestAnimationFrame(loop);

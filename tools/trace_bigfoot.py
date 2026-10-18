@@ -32,9 +32,18 @@ for i, pl in enumerate(groups):
 for p in G.get('seeds_sep', []): cv2.circle(markers, (int(p[0]), int(p[1])), 4, 1, -1)
 ws = cv2.watershed(cv2.GaussianBlur(im2, (3, 3), 0), markers)
 plates = []
+# 分水岭把缝（深色描边 + 棕色底板）都分给了背景标签 → 板偏小、缝偏宽（参考缝 ≈ 描边 2.5 + 棕 4 + 描边 2.5）。
+# 每块板向外长 GROW px，但离任何其它板至少保留 KEEP px（不重叠，物理与原手掌关卡一样留 1~4px 缝）
+GROW, KEEP = 7, 5.5
+masks = []
 for i, pl in enumerate(groups):
     m = (ws == i + 2).astype(np.uint8) * 255
-    m = cv2.morphologyEx(m, cv2.MORPH_OPEN, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (9, 9)))
+    masks.append(cv2.morphologyEx(m, cv2.MORPH_OPEN, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (9, 9))))
+D = np.stack([cv2.distanceTransform(255 - m, cv2.DIST_L2, 5) for m in masks])
+for i, pl in enumerate(groups):
+    others = np.delete(D, i, axis=0).min(0)
+    m = ((D[i] <= GROW) & (D[i] + KEEP <= others) & (foot > 0)).astype(np.uint8) * 255
+    m = cv2.morphologyEx(m, cv2.MORPH_OPEN, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5)))
     cs, _ = cv2.findContours(m, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
     c = max(cs, key=cv2.contourArea)
     plates.append({'poly': cv2.approxPolyDP(c, 1.4, True)[:, 0, :].tolist(), 'screws': pl['screws'], 'holes': pl.get('holes', []), 'mat': pl.get('mat', 'metal'), 'name': pl.get('name', '')})

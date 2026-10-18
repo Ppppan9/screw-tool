@@ -1,12 +1,17 @@
 // 设置定义：所有可调参数。版本号 + 迁移。
-export const SETTINGS_VERSION = 13;
+export const SETTINGS_VERSION = 14;
 export const STORE_KEY = 'screwTool.settings';
 // [key, 标签, 类型, 默认, min, max, step]  类型: range/color/bool/select/text/file
 export const GROUPS = [
+  // v1.8 主题（同麻将工具：主题 = 一组外观默认值 + 参考关卡；每个主题分别记住用户改过的外观，见 src/themes.js）
+  ['主题', [
+    ['theme', '界面主题', 'select', 'palm', [['palm', '手掌款（默认）'], ['classic', '经典款（大脚掌）']]],
+    ['_resetTheme', '恢复当前主题默认外观', 'button', 'resetTheme', '↺ 恢复主题外观'],
+  ]],
   ['画布与关卡', [
     ['canvasW', '画布宽度(px)', 'range', 720, 360, 1440, 2],
     ['canvasH', '画布高度(px)', 'range', 1280, 640, 2560, 2],
-    ['level', '关卡', 'select', 'reference', [['reference', '参考关卡（手掌）'], ['random', '随机生成（保证可解）'], ['image', '导入透明图形生成']]],
+    ['level', '关卡', 'select', 'reference', [['reference', '参考关卡（随主题：手掌 / 大脚掌）'], ['random', '随机生成（保证可解）'], ['image', '导入透明图形生成']]],
     ['seed', '随机种子', 'range', 1, 1, 9999, 1],
     ['emptyHoles', '初始空孔数(随机关)', 'range', 2, 1, 8, 1],
     ['screwsPerPlate', '每块板螺丝数(随机关,上限)', 'range', 2, 1, 4, 1],
@@ -55,7 +60,10 @@ export const GROUPS = [
     ['plateTintAmt', '图片颜色混合比例', 'range', 0.35, 0, 1, 0.01],
   ]],
   ['外观', [
-    ['bgMode', '背景类型', 'select', 'image', [['image', '参考视频提取背景图（默认）'], ['procedural', '程序化绘制（纯色+纸纹+薄荷叶）']]],
+    ['bgMode', '背景类型', 'select', 'image', [['image', '参考视频提取背景图（默认）'], ['procedural', '程序化绘制（纯色+纸纹+薄荷叶）'], ['silk', '丝绸线条（程序化，经典款）']]],
+    ['silkColor', '丝线颜色(丝绸背景)', 'color', '#a99671'],
+    ['silkOpacity', '丝线透明度(丝绸背景)', 'range', 0.55, 0, 1, 0.01],
+    ['linen', '亚麻布纹强度(丝绸背景)', 'range', 0.5, 0, 1, 0.01],
     ['bgColor', '背景色(程序化)', 'color', '#668772'],
     ['bgNoise', '背景纸纹强度', 'range', 0.10, 0, 0.4, 0.01],
     ['leafOpacity', '薄荷叶线稿透明度', 'range', 0.35, 0, 1, 0.01],
@@ -64,9 +72,12 @@ export const GROUPS = [
     ['baseColor', '底板颜色', 'color', '#bf8a80'],
     ['baseGrain', '底板木纹强度', 'range', 0.16, 0, 0.6, 0.01],
     ['baseOutline', '底板描边色', 'color', '#3a1d1c'],
+    ['baseStyle', '底板纹理', 'select', 'pencil', [['pencil', '粉色铅笔纹（手掌款）'], ['wood', '木纹（经典款）']]],
     ['baseGloss', '底板内侧白色亮边', 'range', 0.5, 0, 1, 0.01],
     ['edgeHalo', '描边外浅色光晕', 'range', 0.28, 0, 1, 0.01],
+    ['plateStyle', '板块材质', 'select', 'hatch', [['hatch', '薰衣草铅笔排线（手掌款）'], ['metal', '拉丝金属（经典款）']]],
     ['plateColor', '板块颜色', 'color', '#bfb7ee'],
+    ['plateAltColor', '第二板材颜色（关卡里标记的板，如经典款脚跟米色板）', 'color', '#c8b896'],
     ['plateShade', '板块厚度边颜色', 'color', '#5d5394'],
     ['plateThick', '板块厚度(px)', 'range', 1.5, 0, 14, 0.5],
     ['plateGrain', '板块木纹/排线强度', 'range', 0.3, 0, 1, 0.01],
@@ -75,6 +86,7 @@ export const GROUPS = [
     ['outlineW', '描边宽度', 'range', 2.1, 0, 6, 0.1],
     ['plateRadius', '板块圆角倍率', 'range', 1, 0, 2, 0.05],
     ['plateShadow', '板块投影', 'range', 0.18, 0, 1, 0.01],
+    ['screwStyle', '螺丝样式', 'select', 'brushed', [['brushed', '拉丝银细十字（手掌款）'], ['chrome', '镜面银粗十字+黑边（经典款）']]],
     ['screwSize', '螺丝直径(px)', 'range', 40, 16, 70, 1],
     ['screwColor', '螺丝主色', 'color', '#c4bfe6'],
     ['screwDark', '螺丝暗部色', 'color', '#5f5a86'],
@@ -88,6 +100,7 @@ export const GROUPS = [
     ['plateHoleSize', '板孔直径(px，镂空，参考≈33)', 'range', 33, 12, 64, 0.5],
     ['plateHoleWall', '板孔上沿孔壁厚(px)', 'range', 2.6, 0, 8, 0.1],
     ['holeColor', '孔颜色', 'color', '#2a140d'],
+    ['holeStyle', '空孔样式', 'select', 'cream', [['cream', '深红棕+奶白斜面（手掌款）'], ['black', '黑色深孔（经典款）']]],
   ]],
   ['动画时长', [
     ['liftDur', '拧出/抬起时长(ms，参考≈100–133)', 'range', 120, 30, 800, 10],
@@ -201,8 +214,9 @@ export const GROUPS = [
 ];
 export const DEFS = {};
 for (const [, items] of GROUPS) for (const it of items) if (it[2] !== 'button') DEFS[it[0]] = it[3];
+DEFS.themeStore = {}; // { 主题id: { 键: 用户在该主题下改过的外观值 } }（不在面板里显示）
 export function migrate(obj) {
-  if (!obj || typeof obj !== 'object') return { ...DEFS };
+  if (!obj || typeof obj !== 'object') return { ...DEFS, themeStore: {} };
   let v = obj.version || 0, s = { ...(obj.settings || obj) };
   // v0 -> v1: 早期草稿无版本号，字段直接平铺
   if (v < 1) v = 1;
@@ -240,13 +254,17 @@ export function migrate(obj) {
   if (v < 12) { if (s.ppInset === 1.5) delete s.ppInset; v = 12; }
   // v12 -> v13（v1.7.2 被托住的板不再穿过）：collStuckMs 旧默认 1200 → 0（永不穿过）
   if (v < 13) { if (s.collStuckMs === 1200) delete s.collStuckMs; v = 13; }
-  const out = { ...DEFS };
+  // v13 -> v14（v1.8 主题下拉）：新增 theme（缺省 = 手掌款，即之前的外观，数值不变）、themeStore 与经典款材质键——只补默认
+  if (v < 14) { if (s.themeStore && (typeof s.themeStore !== 'object' || Array.isArray(s.themeStore))) delete s.themeStore; v = 14; }
+  const out = { ...DEFS, themeStore: {} };
   for (const k in DEFS) if (k in s && typeof s[k] === typeof DEFS[k]) out[k] = s[k];
+  if (!['palm', 'classic'].includes(out.theme)) out.theme = 'palm';
+  if (!out.themeStore || typeof out.themeStore !== 'object' || Array.isArray(out.themeStore)) out.themeStore = {};
   return out;
 }
 export function loadSettings() {
   try { const raw = localStorage.getItem(STORE_KEY); if (raw) return migrate(JSON.parse(raw)); } catch (e) { }
-  return { ...DEFS };
+  return { ...DEFS, themeStore: {} };
 }
 export function saveSettings(S) {
   try { localStorage.setItem(STORE_KEY, JSON.stringify({ version: SETTINGS_VERSION, settings: S })); } catch (e) { console.warn('save fail (图片过大?)', e); }
