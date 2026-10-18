@@ -1,0 +1,10 @@
+v1.7.2 test log Sun Oct 18 18:49:39 CST 2026
+test:logic rc=0 1s
+test:rest rc=0 12s
+test:autoall rc=0 754s
+test:overlap rc=1 560s
+test:collision rc=1 0s
+(background run stopped after collision; remaining suites not run in this pass)
+test:collision FAILS (rerun): 高速下落板-螺丝 穿透 4.05px(<2)；落到固定板 3.63px、偏心 3.65px、两块下落板 7.37px(<1.5)；摆动板被固定板挡住 5.4° 但 settled=false
+test:overlap FAILS: heart/heart-s2/reference/random1/random42x3 — worstPP 22–40px between fall/fall or fall/swing plates, pass=false, ghosts 0; worstPS 5–6.7px (fall plate vs screw, pass=false)
+Tried: exempting ppGhost plates in both tests -> no change (not ppGhost-related), reverted.

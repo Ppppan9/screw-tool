@@ -79,3 +79,4 @@
   - 结果（4e10809 之后数个提交）：test:autoall 5/5 PASS——reference(43 步)/random1(58)/random7(127)/random42×3(75)/image(81)，abort 0、nudge 0、ghosts 0、mispredict 0（每步实际快照与预测逐字段完全相同）。关键修复：快照里 gone 板只记状态；恢复时不为 gone 板建刚体（否则宽相树不同 → 不逐位一致）。
   - 已知：随机关生成要做物理求解，3 层约 10–20s（每次失败 +1 空孔，genSolveMs 4000/次）。
   - 下一步：rest-on-screw 测试（main.js loadLevel 钩子 + test/rest-screw-test.mjs + screenshots/rest_on_screw.jpg）、AE/3D 检查、所有套件逐个、发布。
+- v1.7.2 发布尝试（2026-10-18 19:50 UTC+8，基于 15abfb4）：未发布。build OK；test:logic/rest/autoall 通过；test:overlap、test:collision 失败（板-板穿透 3.6–40px、板-螺丝 4–6.7px，非 ppGhost 引起；摆动板不再 settled，可能与 allowSleep:false/固定步长 DT 有关）。详见 ref/v172_test_log.txt。下一步：查 stepFixed/stepWorld 兼容包装下的碰撞（对比 4e10809 之前 collision-test 全过的提交，git bisect）。
