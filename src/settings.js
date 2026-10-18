@@ -1,5 +1,5 @@
 // 设置定义：所有可调参数。版本号 + 迁移。
-export const SETTINGS_VERSION = 12;
+export const SETTINGS_VERSION = 13;
 export const STORE_KEY = 'screwTool.settings';
 // [key, 标签, 类型, 默认, min, max, step]  类型: range/color/bool/select/text/file
 export const GROUPS = [
@@ -123,7 +123,7 @@ export const GROUPS = [
     ['ppInset', '碰撞轮廓内缩(px，越大同层板越会互相压住边)', 'range', 0.5, 0, 6, 0.1],
     ['ppPassArea', '不同层板重叠超过此面积(px²)才互相穿过（同层板永不穿过）', 'range', 40, 0, 2000, 10],
     ['angDamp', '下落角阻尼(1/s，抑制撞击后快速旋转)', 'range', 1.5, 0, 10, 0.1],
-    ['collStuckMs', '卡住判定(ms，下落板这么久没往下走就穿过障碍)', 'range', 1200, 300, 8000, 100],
+    ['collStuckMs', '卡住穿过(ms，下落板被托住这么久就穿过障碍掉出；0=永不穿过，一直被托住)', 'range', 0, 0, 8000, 100],
   ]],
   ['文字', [
     ['discShow', '显示底部免责声明', 'bool', false],
@@ -237,6 +237,8 @@ export function migrate(obj) {
   if (v < 11) { delete s.collMaxMs; v = 11; }
   // v11 -> v12（v1.7.1 同层板不穿模）：ppInset 旧默认 1.5 → 0.5；新增 ppPassArea 只补默认
   if (v < 12) { if (s.ppInset === 1.5) delete s.ppInset; v = 12; }
+  // v12 -> v13（v1.7.2 被托住的板不再穿过）：collStuckMs 旧默认 1200 → 0（永不穿过）
+  if (v < 13) { if (s.collStuckMs === 1200) delete s.collStuckMs; v = 13; }
   const out = { ...DEFS };
   for (const k in DEFS) if (k in s && typeof s[k] === typeof DEFS[k]) out[k] = s[k];
   return out;

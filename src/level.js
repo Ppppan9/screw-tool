@@ -58,7 +58,7 @@ export function pointInPoly(x, y, poly) {
 
 // ---------- 逻辑状态 ----------
 // state: { removed:Set(plateIdx), screwHole: int[] (screw -> hole, -1 none) }
-export function initState(L) { const st = { removed: new Set(), screwHole: L.screws.map(s => s.hole), lifted: new Set(), swing: new Map(), npins: null }; st.npins = L.plates.map((_, pi) => platePins(L, st, pi).length); return st; }
+export function initState(L) { const st = { removed: new Set(), screwHole: L.screws.map(s => s.hole), lifted: new Set(), swing: new Map(), rest: new Map(), npins: null }; st.npins = L.plates.map((_, pi) => platePins(L, st, pi).length); return st; }
 // ---------- v1.5 孔位固定在底板 ----------
 // L.holes 是底板上的孔（固定不动）。板在静止位姿时自己的孔对准 p.holes 里的底板孔。
 // 板由多钉减到 1 钉后绕剩下那颗摆到 ±swingMax（与画面物理一致），记录在 st.swing：之后用摆动后的轮廓/孔位判断覆盖与对齐。
@@ -134,11 +134,13 @@ export function holeLayer(L, hi) {
 export function holeUsable(L, st, hi) {
   if (holeOccupied(st, hi)) return false;
   const hl = holeLayer(L, hi);
+  if (restCovers(st, hi, false)) return false;
   return coverCands(L, st, hi).every(pi => st.removed.has(pi) || !plateCovers(L, st, pi, hi) || plateAligned(L, st, pi, hi) || (BLOCK && L.plates[pi].layer < hl && !st.swing.has(pi)));
 }
 // 螺丝可取：其位置上方没有更高层且未开孔的板压住
 export function screwFree(L, st, si) {
   const hi = st.screwHole[si]; if (hi < 0) return false;
+  if (restCovers(st, hi, true)) return false;
   const cov = coverCands(L, st, hi).filter(pi => !st.removed.has(pi) && plateCovers(L, st, pi, hi, true));
   const pinnedTop = Math.max(-1, ...cov.filter(pi => plateAligned(L, st, pi, hi)).map(pi => L.plates[pi].layer));
   return !cov.some(pi => !plateAligned(L, st, pi, hi) && L.plates[pi].layer > pinnedTop);
@@ -154,6 +156,7 @@ export function platePins(L, st, pi) {
 // v1.2.1（对齐参考 3.97s 点击→4.17s 板开始下落）：螺丝一旦拧出（离开孔）就不再固定任何板，
 // 先在“螺丝不在任何孔”的状态下结算掉落，再把螺丝放入目标孔
 export function settle(L, st) {
+  releaseRest(st);
   const fell = []; let changed = true;
   if (!st.swing) st.swing = new Map();
   if (!st.npins) st.npins = L.plates.map(() => 0);
@@ -168,6 +171,7 @@ export function settle(L, st) {
       st.npins[pi] = platePins(L, st, pi).length;
     });
   }
+  releaseRest(st);
   return fell;
 }
 // v1.7：物理决定摆动板实际停下的角度（可能被其它板/螺丝挡在 < swingMax 处）。游戏里摆动板静止后把逻辑位姿同步为实际角度，再结算。
@@ -222,7 +226,27 @@ export function applyMove(L, st, si, hi) {
   return fell.concat(settle(L, st));
 }
 export function usableHoles(L, st) { return L.holes.map((_, i) => i).filter(i => holeUsable(L, st, i)); }
-export function done(L, st) { return st.removed.size === L.plates.length; }
+export function done(L, st) { return st.removed.size === L.plates.length && !(st.rest && st.rest.size); }
+// v1.7.2：被托住的板（0 钉，但还在画面上、被螺丝杆/其它板托住）。逻辑上已“释放”（在 removed 里），但仍按物理实际位姿
+// 挡住其下的底板孔（空孔用边缘容差，已插螺丝用严格规则；自己对准的孔照常可用），直到它的某个支撑被移走（假设随即掉出，物理静止后再同步）。
+//   st.rest: pi → { pose, scr: [[si, hole]], pl: [pj] }
+function restCovers(st, hi, strict) {
+  if (!st.rest || !st.rest.size) return false;
+  for (const r of st.rest.values()) if ((strict ? r.pose.inn : r.pose.cov).has(hi) && !r.pose.al.has(hi)) return true;
+  return false;
+}
+export function setRest(L, st, pi, xf, sup) {
+  if (!st.rest) st.rest = new Map();
+  st.rest.set(pi, { pose: poseFromXf(L, pi, xf), scr: sup.s.filter(si => st.screwHole[si] >= 0).map(si => [si, st.screwHole[si]]), pl: sup.p.slice() });
+}
+export function clearRest(st, pi) { if (st.rest) st.rest.delete(pi); }
+// 支撑被移走（螺丝离开原孔 / 支撑板已离开）→ 不再托住
+function releaseRest(st) {
+  if (!st.rest || !st.rest.size) return;
+  let ch = true;
+  while (ch) { ch = false; for (const [pi, r] of [...st.rest]) if (r.scr.some(([si, h]) => st.screwHole[si] !== h) || r.pl.some(pj => st.removed.has(pj) && !st.rest.has(pj))) { st.rest.delete(pi); ch = true; } }
+}
+export function restSupporters(st) { const m = new Set(); if (st.rest) for (const r of st.rest.values()) r.scr.forEach(([si]) => m.add(si)); return m; }
 
 // 目标孔选择规则
 export function pickHole(L, st, si, rule, lastVacated, rnd = Math.random) {
@@ -242,18 +266,18 @@ export function pickHole(L, st, si, rule, lastVacated, rnd = Math.random) {
 // 自动求解：贪心 + 回溯。返回 [[screw, hole], ...] 或 null
 export function solve(L, st0, maxNodes = 20000) {
   let nodes = 0;
-  const clone = (s) => ({ removed: new Set(s.removed), screwHole: s.screwHole.slice(), swing: new Map(s.swing), npins: s.npins ? s.npins.slice() : null });
+  const clone = (s) => ({ removed: new Set(s.removed), screwHole: s.screwHole.slice(), swing: new Map(s.swing), rest: new Map(s.rest || []), npins: s.npins ? s.npins.slice() : null });
   function rec(st, path) {
     if (done(L, st)) return path;
     if (++nodes > maxNodes) return null;
     const holes = usableHoles(L, st).filter(h => !L.plates.some((p, pi) => !st.removed.has(pi) && p.holes.includes(h)));
     if (!holes.length) return null;
     // 候选螺丝：在未掉落板上且可取，按所在板剩余螺丝数、层级排序
-    const cands = [];
+    const cands = [], sups = restSupporters(st);
     st.screwHole.forEach((h, si) => {
       if (h < 0 || !screwFree(L, st, si)) return;
       const pls = L.plates.map((p, pi) => pi).filter(pi => !st.removed.has(pi) && L.plates[pi].holes.includes(h));
-      if (!pls.length) return;
+      if (!pls.length) { if (sups.has(si)) cands.push({ si, score: -1000 - L.holes[h].y / 1000 }); return; }
       const rem = Math.max(...pls.map(pi => platePins(L, st, pi).length));
       const lay = Math.max(...pls.map(pi => L.plates[pi].layer));
       cands.push({ si, score: rem * 10 - lay - L.holes[h].y / 1000 });

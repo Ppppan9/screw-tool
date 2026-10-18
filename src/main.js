@@ -1,7 +1,7 @@
 import { levelFromImage, defaultShapeCanvas } from './shapegen.js';
 import { newBody, toWorld as bodyToWorld } from './physics.js';
-import { createWorld, stepWorld, swingMoving } from './world.js';
-import { referenceLevel, generateLevel, initState, holeUsable, screwFree, applyMove, pickHole, solve, done, setBlocking, platePins, coverInfo, liftOut, cancelLift, setPhysicsRules, setSwingAngle, poseFromXf, setPlatePose, poseDiff, pointInPoly, ALIGN_TOL, EDGE_TOL } from './level.js';
+import { createWorld, stepWorld, swingMoving, fallUnsettled } from './world.js';
+import { referenceLevel, generateLevel, initState, holeUsable, screwFree, applyMove, pickHole, solve, done, setBlocking, platePins, coverInfo, liftOut, cancelLift, setPhysicsRules, setSwingAngle, poseFromXf, setPlatePose, poseDiff, setRest, clearRest, pointInPoly, ALIGN_TOL, EDGE_TOL } from './level.js';
 import { toLocal as bodyToLocal } from './physics.js';
 import { GROUPS, DEFS, loadSettings, saveSettings, migrate, exportJSON } from './settings.js';
 import { drawBackground, drawBase, plateSprite, drawHole, drawScrew } from './render.js';
@@ -73,10 +73,11 @@ function visBlocked(hi) {
   const h = L.holes[hi];
   return L.plates.some((p, pi) => {
     const b = plateVis[pi]; if (b.s === 'gone' || !(st.removed.has(pi) || b.s === 'fall' || b.posed)) return false;
+    if (b.rest && st.rest.has(pi)) return false; // v1.7.2：被托住的板由逻辑 st.rest（实际位姿）判定遮挡，与 holeUsable/screwFree 一致
     const [lx, ly] = b.posed ? bodyToLocal(b, h.x, h.y) : [h.x, h.y];
     const covered = pointInPoly(lx, ly, p.poly) || p.poly.some((q, i) => { const r = p.poly[(i + 1) % p.poly.length], dx = r[0] - q[0], dy = r[1] - q[1], t = Math.max(0, Math.min(1, ((lx - q[0]) * dx + (ly - q[1]) * dy) / (dx * dx + dy * dy || 1))); return Math.hypot(q[0] + t * dx - lx, q[1] + t * dy - ly) < EDGE_TOL; });
     if (!covered) return false;
-    if (b.s === 'fall' || st.removed.has(pi)) return true;
+    if (!b.rest && (b.s === 'fall' || st.removed.has(pi))) return true; // v1.7.2：被托住的板自己对准的孔照常可点
     // 摆动/有位姿的板：只有自己的孔（随板移动后）仍对准该底板孔才不挡
     return !p.holes.some(k => { const w = bodyToWorld(b, L.holes[k].x, L.holes[k].y); return Math.hypot(w[0] - h.x, w[1] - h.y) <= ALIGN_TOL; });
   });
@@ -144,10 +145,17 @@ function step(t, dt) {
   // v1.7：摆动板静止后，逻辑位姿同步为物理实际停下的角度（被其它板/螺丝挡住时 < swingMax）
   // v1.7.1：板静止后（摆动停下、或被重新固定）逻辑位姿同步为物理实际位姿（通用刚体变换，不再假设绕原支点转）
   plateVis.forEach((b, pi) => { if (st.removed.has(pi) || !st.swing.has(pi)) return; if (((b.s === 'swing' && b.settled) || b.s === 'on') && poseDiff(L, st, pi, b) > 0.8) setPlatePose(L, st, pi, b); });
+  // v1.7.2：被托住的板 → 逻辑 st.rest（实际位姿 + 支撑螺丝/板）；不再被托住/出屏 → 清除
+  plateVis.forEach((b, pi) => {
+    if (b.s === 'fall' && b.rest && b.sup) {
+      const r = st.rest.get(pi), k = b.sup.s.slice().sort().join(',') + '/' + b.sup.p.slice().sort().join(',');
+      if (!r || r.key !== k || Math.abs(r.pose.ang - b.ang) > 0.01 || Math.hypot(r.pose.dx - b.dx, r.pose.dy - b.dy) > 0.8) { setRest(L, st, pi, b, b.sup); st.rest.get(pi).key = k; }
+    } else if (st.rest.has(pi)) clearRest(st, pi);
+  });
   if (!finishedAt && done(L, st) && plateVis.every(p => p.s === 'gone')) { finishedAt = t; onFinish(); }
 }
 const busy = () => screwVis.some(v => v.anim && v.anim.k !== 'hover');
-const physBusy = () => world && swingMoving(world);
+const physBusy = () => world && (swingMoving(world) || fallUnsettled(world));
 
 // ---------- 绘制 ----------
 const visOnG = (pi) => plateVis[pi].s === 'on' || plateVis[pi].s === 'swing';
@@ -296,14 +304,18 @@ async function autoSolve() {
   try {
     await wait(S.autoStartDelay, tok);
     // v1.7：物理决定画面（摆动板可能停在更小角度、下落板可能被托住一会儿）→ 每步前确认计划仍合法，否则从当前状态重新求解
-    let plan2 = plan.slice(), tries = 0; window.__autoStats = { replan: 0, abort: 0, dev: 0 };
+    let plan2 = plan.slice(), tries = 0; window.__autoStats = { replan: 0, abort: 0, dev: 0, nudge: 0 };
     const legal = ([si, hi]) => st.screwHole[si] >= 0 && screwFree(L, st, si) && holeUsable(L, st, hi);
     const waitUntil = async (f, ms) => { const tw = now(); while (!f() && now() - tw < ms) { if (tok !== autoToken) throw 'stop'; await new Promise(r => requestAnimationFrame(r)); } };
     while (!done(L, st)) {
       await waitIdle(tok); await waitUntil(() => !physBusy(), 1500);
       if (!plan2.length || !legal(plan2[0])) {
         plan2 = solve(L, st) || []; window.__autoStats.replan++;
-        if (!plan2.length) { if (++tries > 20) { status('当前局面无解，请重新开始'); break; } await wait(250, tok); continue; }
+        if (!plan2.length) {
+          // v1.7.2 兜底：被托住的板让局面无解（支撑螺丝无处可放）→ 让一块被托住的板穿过掉出（记入 __autoStats.nudge，测试要求为 0）
+          if (tries >= 8 && st.rest.size) { const pi = [...st.rest.keys()][0]; if (window.__DBGN) console.log('NUDGE ' + JSON.stringify({ rest: [...st.rest].map(([k, r]) => [k, r.scr, r.pl, [...r.pose.cov]]), removed: [...st.removed], free: L.holes.map((_, k) => k).filter(k => holeUsable(L, st, k)), freeScrews: st.screwHole.map((h, si) => screwFree(L, st, si) ? si : -1).filter(x => x >= 0).length, onPlates: L.plates.map((p, i) => st.removed.has(i) ? null : [i, platePins(L, st, i)]).filter(Boolean) })); plateVis[pi].nudge = true; window.__autoStats.nudge++; tries = 0; await wait(600, tok); continue; }
+          if (++tries > 20) { status('当前局面无解，请重新开始'); break; } await wait(250, tok); continue;
+        }
       }
       tries = 0;
       const [si, hi] = plan2.shift();

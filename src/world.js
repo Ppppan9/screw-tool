@@ -76,7 +76,7 @@ export function convexParts(poly) {
 // ---------- 世界 ----------
 const key = (a, b) => a < b ? a + '|' + b : b + '|' + a;
 export function createWorld(L, bodies, S) {
-  const pw = new World({ gravity: Vec2(0, (S.gravity || 3600) / PX) });
+  const pw = new World({ gravity: Vec2(0, (S.gravity || 3600) / PX), allowSleep: false }); // v1.7.2：不休眠——被托住的板在支撑移走后必须立即下落
   const W = { pw, L, S, bodies, ground: pw.createBody(), plates: [], screws: new Map(), pass: new Map(), steps: 0 };
   bodies.forEach((b, pi) => {
     const ins = S.ppInset ?? 1.5, parts = convexParts(ins > 0 ? offsetPoly(L.plates[pi].poly, ins) : L.plates[pi].poly), m = b.m, c0 = toWorld(b, m.cx, m.cy);
@@ -206,7 +206,17 @@ export function stepWorld(W, pins, pinW, dt, S, obst) {
     } else if (b.s === 'fall') {
       b.tf += h;
       if (b.cy > b.prog.cy + 20) b.prog = { cy: b.cy, t: b.tf };
-      else if (!b.ghost && (b.tf - b.prog.t) * 1000 > (S.collStuckMs ?? 1200)) {
+      // v1.7.2：被托住（几乎不动）→ rest；记录支撑者（正在接触的螺丝/板）。默认不再穿过（collStuckMs=0）
+      const v = body.getLinearVelocity(), still = Math.hypot(v.x, v.y) * PX < 25 && Math.abs(b.om) < 0.3 && !b.ghost;
+      b.restT = still ? (b.restT || 0) + h : 0;
+      if (b.restT > 0.15) {
+        const sup = { s: [], p: [] };
+        for (let e = body.getContactList(); e; e = e.next) { if (!e.contact.isTouching() || !e.contact.isEnabled()) continue; const u = e.other.getUserData(); if (!u) continue; if (u.k === 's') sup.s.push(u.sid); else if (u.k === 'p') sup.p.push(u.pi); }
+        b.rest = sup.s.length + sup.p.length > 0; b.sup = sup;
+      } else if (!still) { b.rest = false; b.sup = null; }
+      if (b.nudge && !b.ghost) b.ghostNow = true;
+      if (!b.ghost && (b.ghostNow || ((S.collStuckMs ?? 0) > 0 && (b.tf - b.prog.t) * 1000 > S.collStuckMs))) {
+        b.ghostNow = false; b.rest = false; b.sup = null; W.ghosts = (W.ghosts || 0) + 1;
         // 卡住（被板/螺丝托住太久）：关闭它的碰撞，让它穿过障碍掉出画面——保证画面上不会永久留下逻辑上已掉落的板
         b.ghost = true; for (let f = body.getFixtureList(); f; f = f.getNext()) f.setFilterData({ groupIndex: 0, categoryBits: 1, maskBits: 0 });
         body.setAwake(true);
@@ -227,4 +237,6 @@ export function stepWorld(W, pins, pinW, dt, S, obst) {
 }
 function bodyOf(W, id) { return id[0] === 'p' ? W.plates[+id.slice(1)].body : W.screws.get(+id.slice(1)); }
 // 当前是否有动态板在运动（自动通关在摆动板静止后再走下一步，以便逻辑同步实际停下的角度）
+// v1.7.2：刚开始下落、还不知道会掉出还是被托住的板（自动通关等它有结论再走下一步）
+export function fallUnsettled(W) { return W.bodies.some(b => b.s === 'fall' && !b.rest && !b.ghost && b.tf < 1.0 && b.cy < 1500); }
 export function swingMoving(W) { return W.bodies.some(b => b.s === 'swing' && !b.settled); }
