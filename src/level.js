@@ -1,4 +1,5 @@
 import TRACE from './ref_trace.json';
+import FOOT from './bigfoot_trace.json';
 import { smoothPoly, offsetPoly } from './geom.js';
 import { massProps } from './physics.js';
 // 关卡数据与逻辑。坐标系 720x1280。参考关卡由 ref/frames/g_004.jpg (t=2.93s) 逐点描绘：crop 偏移 (110,310)
@@ -44,6 +45,20 @@ export function referenceLevel() {
   for (const [x, y] of HIDDEN) holes.push({ x, y });
   plates.forEach(pl => pl.holes.forEach(h => screws.push({ hole: h })));
   return { plates, holes, screws, base, name: 'reference' };
+}
+
+// v1.8 经典款（大脚掌）：tools/trace_bigfoot.py 从朋友圈广告截图分割（src/bigfoot_trace.json，22 块板 25 颗螺丝，脚跟板上 1 个空孔）
+// 板的 holes 里可以有不带螺丝的孔（脚跟板的黑色空孔 = 板孔对准底板孔）；FOOT_HIDDEN = 被板盖住的额外底孔（仅在求解需要时添加）
+export const FOOT_HIDDEN = [];
+export function bigfootLevel(hidden = FOOT_HIDDEN) {
+  const plates = [], holes = [], screws = [], base = { polys: [offsetPoly(smoothPoly(FOOT.base, 1.6, 3), REF_BASE_INSET)], capsules: [], smooth: true };
+  FOOT.plates.forEach(tp => {
+    const hs = tp.screws.map(([x, y]) => { holes.push({ x, y }); screws.push({ hole: holes.length - 1 }); return holes.length - 1; });
+    const open = (tp.holes || []).map(([x, y]) => { holes.push({ x, y }); hs.push(holes.length - 1); return holes.length - 1; });
+    plates.push({ openHoles: open, poly: smoothPoly(tp.poly, 1.2, 2), smooth: true, layer: 0, holes: hs, radius: 3, mat: tp.mat === 'beige' ? 'alt' : undefined, name: tp.name });
+  });
+  for (const [x, y] of hidden) holes.push({ x, y });
+  return { plates, holes, screws, base, name: 'bigfoot' };
 }
 
 // ---------- 几何 ----------

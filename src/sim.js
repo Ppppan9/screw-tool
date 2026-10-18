@@ -118,7 +118,8 @@ function roughKey(snap) { return snap.vHole.join(',') + '|' + snap.bodies.map(r 
 const KEYS = new WeakMap(); function exactKey(snap) { let k = KEYS.get(snap); if (!k) KEYS.set(snap, k = JSON.stringify(snap)); return k; }
 export function legalMoves(sim, L, st, snap) {
   const bodies = sim.bodies;
-  const holes = L.holes.map((_, i) => i).filter(h => holeUsable(L, st, h) && !visBlockedBy(L, bodies, st, h) && !L.plates.some((p, pi) => !st.removed.has(pi) && p.holes.includes(h)));
+  const holes = L.holes.map((_, i) => i).filter(h => holeUsable(L, st, h) && !visBlockedBy(L, bodies, st, h) && !L.plates.some((p, pi) => !st.removed.has(pi) && p.holes.includes(h) && !(p.openHoles && p.openHoles.includes(h))));
+  // v1.8：openHoles = 关卡作者标明可以插螺丝的板上空孔（经典款脚跟板的黑孔）；其它板孔求解器不往里放（减少分支）
   const cands = [], sups = new Set(); st.rest.forEach(r => r.scr.forEach(([si]) => sups.add(si)));
   st.screwHole.forEach((h, si) => {
     if (h < 0 || !screwFree(L, st, si) || visBlockedBy(L, bodies, st, h)) return;
