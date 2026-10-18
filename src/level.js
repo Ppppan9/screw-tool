@@ -234,7 +234,7 @@ export function done(L, st) { return st.removed.size === L.plates.length && !(st
 //   st.rest: pi → { pose, scr: [[si, hole]], pl: [pj] }
 function restCovers(st, hi, strict) {
   if (!st.rest || !st.rest.size) return false;
-  for (const r of st.rest.values()) if (r.pose.inn.has(hi) && !r.pose.al.has(hi)) return true; // 被托住的板只挡中心在其轮廓内的孔（贴边不挡，避免堆积时整盘无孔可用）
+  for (const r of st.rest.values()) if (r.pose.inn.has(hi) && (!strict || !r.pose.al.has(hi))) return true; // v1.7.2：放螺丝（非 strict）连对准的孔也挡——否则螺丝插进被托住板的孔，板随后下落时穿过螺丝杆 // 被托住的板只挡中心在其轮廓内的孔（贴边不挡，避免堆积时整盘无孔可用）
   return false;
 }
 export function setRest(L, st, pi, xf, sup) {

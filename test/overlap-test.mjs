@@ -38,7 +38,7 @@ for (const [name, opt] of cases) {
         if (pv[i].s === 'swing' && !seenSwing.has(i)) { seenSwing.add(i); swings++; }
         for (let j = i + 1; j < pv.length; j++) {
           if (!polys[j] || L.plates[i].layer !== L.plates[j].layer || !(moving(pv[i]) || moving(pv[j]))) continue;
-          if (pv[i].ghost || pv[j].ghost) continue;
+          if (pv[i].ghost || pv[j].ghost || pv[i].ppGhost || pv[j].ppGhost) continue; // v1.7.2：ppGhost＝只被板托住 ppStuckMs 后有意只穿过板（同 ghost）
           const A = boxes[i], B = boxes[j], x0 = Math.max(A[0], B[0]), y0 = Math.max(A[1], B[1]), x1 = Math.min(A[2], B[2]), y1 = Math.min(A[3], B[3]);
           if (x0 >= x1 || y0 >= y1) continue;
           let d = 0, area = 0;

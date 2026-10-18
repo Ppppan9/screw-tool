@@ -84,4 +84,5 @@
   - SUB=3/10/4 使 overlap 中图形关卡生成超时（heart 15s waitForFunction 失败），参考关卡求解 5.4s→12.2s。实验（PHYS=sub,vel,pos 环境变量，仅 node）：只要 TOI+bullet 开，SUB=1/6/2 穿透全部通过；只剩摆动 settled 失败——贴着固定板的摆动板形成 ±0.1° 极限环（om 0.05↔0.47），om<0.15 永远不满足。修复：settled 另加“0.12s 内角度在 0.35° 带内且 |om|<1”（setRef/setLo/setHi/setT2，applyPins/restoreWorld/wake 复位）。默认 SUB=1, VEL 8, POS 3。collision 16/16。
   - 速度（node test/_bench.mjs，需 esbuild 打包）：reference solvePhys 1/6/2 5.3s、3/10/4 12.2s；random1 生成 ~5.4s；random42×3 生成 ~57–60s（与改动无关，genSolveMs 4000×多次失败）。
   - test:overlap 仍失败（见 v172_test_log）。node 复现 test/_replay.mjs（esbuild 打包后 node；参考关卡 solvePhys 计划逐 tick 回放测同层板顶点穿透）：最大 37px 的一方 ppGhost=true（只被板托住 ppStuckMs 后只穿过板——v1.7.2 新的有意行为，v1.7.1 没有）；XPPG=1 排除 ppGhost 后最大 3.41px（第 6 步 tick 2，刚释放的板与贴着的固定板，释放前已贴住）。
-  - 下一步：① overlap-test 把 ppGhost 板与 ghost 一样排除（板-板），板-螺丝仍测；② 查 worstPS：random1/42x3 的 54px 是 pass 对（螺丝落进被动态板盖住的孔 → screwOverlaps 设穿过），heart 5.4px/reference 3.7px 是下落板 vs 螺丝（需 replay 加 PS 测量定位）；③ 释放瞬间 3.4px 预穿透（摆动极限环/静止贴住）是否需排除。
+  - 已做：overlap-test 板-板排除 ppGhost（同 ghost）；level.js restCovers 非 strict（放螺丝）时被托住板连对准的孔也挡（random1 54px 的根因：螺丝插进托住板的对准孔，板下落穿过螺丝；修复后 replay random1 PS 0.94）。
+  - 下一步（旧 ① 已做）：② 查 worstPS：random1/42x3 的 54px 是 pass 对（螺丝落进被动态板盖住的孔 → screwOverlaps 设穿过），heart 5.4px/reference 3.7px 是下落板 vs 螺丝（需 replay 加 PS 测量定位）；③ 释放瞬间 3.4px 预穿透（摆动极限环/静止贴住）是否需排除。

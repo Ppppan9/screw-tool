@@ -20,6 +20,11 @@ for (const [si, h] of plan) {
       const mv = b => b.s === 'swing' || (b.s === 'fall' && !b.ghost); if (!(mv(B[i]) || mv(B[j])) || B[i].ghost || B[j].ghost || (process.env.XPPG && (B[i].ppGhost || B[j].ppGhost))) continue;
       for (const v of P[i]) if (inPoly(v[0], v[1], P[j])) { const d = eD(v, P[j]); if (d > worst.d) worst = { d: +d.toFixed(2), i, j, si: B[i].s, sj: B[j].s, step, tick: n, pass: W.pass.has(i < j ? 'p' + i + '|p' + j : 'p' + j + '|p' + i), ppg: [!!B[i].ppGhost, !!B[j].ppGhost], awake: [W.plates[i].body && W.plates[i].body.isAwake(), W.plates[j].body && W.plates[j].body.isAwake()], types: [W.plates[i].body && W.plates[i].body.getType(), W.plates[j].body && W.plates[j].body.getType()] }; }
     }
+    const R = S.collShaftR ?? 6;
+    B.forEach((b, i) => { if (!P[i] || !(b.s === 'swing' || (b.s === 'fall' && !b.ghost))) return; const own = L.plates[i].holes.map(k => toWorld(b, L.holes[k].x, L.holes[k].y));
+      sim.vHole.forEach((hh, s2) => { if (hh < 0) return; const sx = L.holes[hh].x, sy = L.holes[hh].y; if (own.some(([x, y]) => Math.hypot(x - sx, y - sy) < 10)) return; const e = eD([sx, sy], P[i]), d = inPoly(sx, sy, P[i]) ? R + e : R - e;
+        if (d > wps.d) wps = { d: +d.toFixed(2), i, s: b.s, screw: s2, moved: s2 === si, step, tick: n, pass: W.pass.has('p' + i + '|s' + s2) || W.pass.has('s' + s2 + '|p' + i), ppg: !!b.ppGhost, tf: b.tf, vy: W.plates[i].body && +(W.plates[i].body.getLinearVelocity().y * 100).toFixed(0) }; }); });
   }
 }
+console.log('worstPS', JSON.stringify(wps));
 console.log('worstPP', JSON.stringify(worst));
