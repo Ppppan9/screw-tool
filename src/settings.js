@@ -1,5 +1,5 @@
 // 设置定义：所有可调参数。版本号 + 迁移。
-export const SETTINGS_VERSION = 10;
+export const SETTINGS_VERSION = 11;
 export const STORE_KEY = 'screwTool.settings';
 // [key, 标签, 类型, 默认, min, max, step]  类型: range/color/bool/select/text/file
 export const GROUPS = [
@@ -113,11 +113,16 @@ export const GROUPS = [
     ['releaseSpinK', '掉落初始旋转(度/秒 每 px 钉偏心，参考≈8.3)', 'range', 8.3, 0, 40, 0.1],
     ['fallSpin', '掉落额外旋转(度/秒)', 'range', 0, -360, 360, 5],
     ['fallFade', '下落时淡出', 'bool', false],
-    ['collide', '下落板与螺丝碰撞（螺丝杆挡住下落的板）', 'bool', true],
+    ['collide', '板与螺丝碰撞（螺丝杆挡住下落/摆动的板）', 'bool', true],
     ['collShaftR', '碰撞螺丝杆半径(px)', 'range', 6, 1, 20, 0.5],
     ['collRest', '碰撞弹性（恢复系数 0=不弹 1=全弹）', 'range', 0.2, 0, 1, 0.05],
     ['collFric', '碰撞摩擦系数', 'range', 0.3, 0, 1.5, 0.05],
-    ['collMaxMs', '碰撞有效时长(ms，超时后穿过，防止卡住)', 'range', 1500, 200, 6000, 100],
+    ['plateCollide', '板与板碰撞（下落/摆动的板撞到其它板）', 'bool', true],
+    ['ppRest', '板与板碰撞弹性（恢复系数）', 'range', 0.1, 0, 1, 0.05],
+    ['ppFric', '板与板摩擦系数', 'range', 0.4, 0, 1.5, 0.05],
+    ['ppInset', '碰撞轮廓内缩(px，描边/细缝容差)', 'range', 1.5, 0, 6, 0.1],
+    ['angDamp', '下落角阻尼(1/s，抑制撞击后快速旋转)', 'range', 0.6, 0, 10, 0.1],
+    ['collStuckMs', '卡住判定(ms，下落板这么久没往下走就穿过障碍)', 'range', 2000, 300, 8000, 100],
   ]],
   ['文字', [
     ['discShow', '显示底部免责声明', 'bool', false],
@@ -227,6 +232,8 @@ export function migrate(obj) {
   if (v < 9) { const OLD = { liftDur: 140, flyDur: 230, screwInDur: 130, hoverBob: 2 }; for (const k in OLD) if (s[k] === OLD[k]) delete s[k]; v = 9; }
   // v9 -> v10（v1.6）：新增板孔镂空(plateHoleSize/plateHoleWall)与下落碰撞参数——只补默认
   if (v < 10) v = 10;
+  // v10 -> v11（v1.7 板与板碰撞）：collMaxMs（碰撞超时）由 collStuckMs（卡住判定）取代；其余新增键只补默认
+  if (v < 11) { delete s.collMaxMs; v = 11; }
   const out = { ...DEFS };
   for (const k in DEFS) if (k in s && typeof s[k] === typeof DEFS[k]) out[k] = s[k];
   return out;

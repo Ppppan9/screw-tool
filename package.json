@@ -30,7 +30,9 @@
   "devDependencies": {
     "acorn": "^8.19.0",
     "esbuild": "^0.28.2",
+    "planck": "^1.5.1",
     "playwright-core": "^1.64.1",
+    "poly-decomp": "^0.3.0",
     "three": "^0.160.0"
   }
 }

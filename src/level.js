@@ -76,7 +76,11 @@ function swingPose(L, pi, hi) {
 }
 function swingPose0(L, pi, hi) {
   const p = L.plates[pi], h = L.holes[hi], m = p._mp || (p._mp = massProps(p.poly)), rx = m.cx - h.x;
-  const sw = { px: h.x, py: h.y, ang: Math.abs(rx) < 1 ? 0 : Math.sign(rx) * SWING_MAX };
+  return swingPoseAt(L, pi, hi, Math.abs(rx) < 1 ? 0 : Math.sign(rx) * SWING_MAX);
+}
+function swingPoseAt(L, pi, hi, ang) {
+  const p = L.plates[pi], h = L.holes[hi];
+  const sw = { px: h.x, py: h.y, ang, hi };
   sw.poly = p.poly.map(([x, y]) => rotPt(x, y, sw)); sw.holes = p.holes.map(k => rotPt(L.holes[k].x, L.holes[k].y, sw));
   // 预先算好摆动后对准/覆盖的底板孔（求解器/生成器会大量调用）
   sw.al = new Set(); sw.cov = new Set();
@@ -155,6 +159,16 @@ export function settle(L, st) {
     });
   }
   return fell;
+}
+// v1.7：物理决定摆动板实际停下的角度（可能被其它板/螺丝挡在 < swingMax 处）。游戏里摆动板静止后把逻辑位姿同步为实际角度，再结算。
+// 求解器/生成器仍按 ±swingMax 的确定性假设规划；自动通关遇到计划失效时从当前（已同步的）状态重新求解。
+export function setSwingAngle(L, st, pi, ang) {
+  const sw = st.swing && st.swing.get(pi); if (!sw) return [];
+  const a = Math.round(ang / (Math.PI / 1800)) * (Math.PI / 1800); if (Math.abs(a - sw.ang) < 1e-9) return [];
+  const k = pi + ':' + sw.hi + '@' + a; L._swc = L._swc || new Map();
+  if (!L._swc.has(k)) L._swc.set(k, swingPoseAt(L, pi, sw.hi, a));
+  st.swing.set(pi, L._swc.get(k));
+  return settle(L, st);
 }
 export function liftOut(L, st, si) { (st.lifted || (st.lifted = new Set())).add(si); return RELEASE === 'lift' ? settle(L, st) : []; }
 export function cancelLift(st, si) { if (st.lifted) st.lifted.delete(si); }
