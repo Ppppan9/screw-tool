@@ -10,3 +10,4 @@ test:overlap FAILS: heart/heart-s2/reference/random1/random42x3 â€” worstPP 22â€
 Tried: exempting ppGhost plates in both tests -> no change (not ppGhost-related), reverted.
 --- fix run Sun Oct 18 19:14:45 CST 2026 (SUB=3,10/4,TOI)
 test:collision rc=0 16/16
+test:overlap rc=1 653s (SUB=1,8,3+TOI+bullet): heart PP14.4/PS5.4, heart-s2 PP22.7/PS4.7, reference PP31.6/PS3.7, random1 PP0.13/PS54(pass pair), random42x3 PP0.09/PS54(pass pair); 0 abort/mispredict
