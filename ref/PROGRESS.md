@@ -81,4 +81,6 @@
   - 下一步：rest-on-screw 测试（main.js loadLevel 钩子 + test/rest-screw-test.mjs + screenshots/rest_on_screw.jpg）、AE/3D 检查、所有套件逐个、发布。
 - v1.7.2 发布尝试（2026-10-18 19:50 UTC+8，基于 15abfb4）：未发布。build OK；test:logic/rest/autoall 通过；test:overlap、test:collision 失败（板-板穿透 3.6–40px、板-螺丝 4–6.7px，非 ppGhost 引起；摆动板不再 settled，可能与 allowSleep:false/固定步长 DT 有关）。详见 ref/v172_test_log.txt。下一步：查 stepFixed/stepWorld 兼容包装下的碰撞（对比 4e10809 之前 collision-test 全过的提交，git bisect）。
 - v1.7.2 修复物理回归（2026-10-18 19:20 UTC+8）：根因 a8c1118 关闭 continuousPhysics/bullet 且 stepFixed 只做一次 1/120s、6/2 迭代 step（v1.7.1 是 1/360s 子步、10/4 迭代、TOI）。修复：stepFixed 内固定 SUB=3 个 1/360s 子步、VEL_IT 10/POS_IT 4、continuousPhysics 开、下落板 setBullet(true)（applyPins 与 restoreWorld 都设）。test:collision 16/16 通过（含摆动 settled）。
-  - 下一步：逐个跑 test:overlap → test:autoall（确定性/速度）→ 其余套件，记录到 ref/v172_test_log.txt；若太慢，考虑 SUB=2 或仅有下落板时子步。
+  - SUB=3/10/4 使 overlap 中图形关卡生成超时（heart 15s waitForFunction 失败），参考关卡求解 5.4s→12.2s。实验（PHYS=sub,vel,pos 环境变量，仅 node）：只要 TOI+bullet 开，SUB=1/6/2 穿透全部通过；只剩摆动 settled 失败——贴着固定板的摆动板形成 ±0.1° 极限环（om 0.05↔0.47），om<0.15 永远不满足。修复：settled 另加“0.12s 内角度在 0.35° 带内且 |om|<1”（setRef/setLo/setHi/setT2，applyPins/restoreWorld/wake 复位）。默认 SUB=1, VEL 8, POS 3。collision 16/16。
+  - 速度（node test/_bench.mjs，需 esbuild 打包）：reference solvePhys 1/6/2 5.3s、3/10/4 12.2s；random1 生成 ~5.4s；random42×3 生成 ~57–60s（与改动无关，genSolveMs 4000×多次失败）。
+  - 下一步：build → test:overlap（后台）→ test:autoall → 其余套件逐个，记到 ref/v172_test_log.txt。

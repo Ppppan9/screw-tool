@@ -155,7 +155,8 @@ function makeJoint(W, pi, pinW, S) {
 // v1.7.2：固定步长（DT）确定性模拟。applyPins（钉数变化 → 状态转换）与 stepFixed（一步积分 + 读回 + 静止/托住检测）分开，
 // 实时游戏（累加器）与求解器预测（sim.js 无界面模拟）走完全相同的代码与步数 → 预测 == 实际。
 export const DT = 1 / 120;
-export const SUB = 3, VEL_IT = 10, POS_IT = 4;
+export let SUB = 1, VEL_IT = 8, POS_IT = 3;
+if (typeof process !== "undefined" && process.env && process.env.PHYS) [SUB, VEL_IT, POS_IT] = process.env.PHYS.split(",").map(Number);
 // 钉数变化会不会引起状态转换（求解器/实时都用它判定“这一步物理上什么都不会发生”）
 export function pinsChange(bodies, pins, pinW) {
   return bodies.some((b, pi) => {
@@ -180,8 +181,8 @@ export function applyPins(W, pins, pinW, S, obst) {
           b.s = 'swing'; ev[pi] = 'swing'; b.posed = true; body.setType('dynamic'); body.setLinearVelocity(Vec2(0, 0));
           body.setAngularDamping(S.swingDamp || 0); makeJoint(W, pi, pinW[pi], S);
           const cm = toWorld(b, b.m.cx, b.m.cy); body.setAngularVelocity(Math.sign(cm[0] - pinW[pi][0]) * (S.swingKick || 0) * D2R);
-          b.settleT = 0; b.settled = false; markOverlaps(W, pi);
-        } else if (b.s === 'swing' && (!b.pivW || Math.hypot(b.pivW[0] - pinW[pi][0], b.pivW[1] - pinW[pi][1]) > 3)) { makeJoint(W, pi, pinW[pi], S); b.settleT = 0; b.settled = false; }
+          b.settleT = 0; b.settled = false; b.setRef = null; b.setT2 = 0; markOverlaps(W, pi);
+        } else if (b.s === 'swing' && (!b.pivW || Math.hypot(b.pivW[0] - pinW[pi][0], b.pivW[1] - pinW[pi][1]) > 3)) { makeJoint(W, pi, pinW[pi], S); b.settleT = 0; b.settled = false; b.setRef = null; b.setT2 = 0; }
         b.lastPiv = pinW[pi].slice();
       } else {
         const cm = toWorld(b, b.m.cx, b.m.cy), rx = b.lastPiv ? cm[0] - b.lastPiv[0] : 0, wasStatic = b.s === 'on';
@@ -200,7 +201,7 @@ export function applyPins(W, pins, pinW, S, obst) {
 // 一个固定步：返回事件数组（'gone'|null）
 export function stepFixed(W, S) {
   const h = DT, g = S.gravity / PX, ev = W.bodies.map(() => null), hs = h / SUB;
-  // v1.7.2：一个 DT 内 SUB 个子步（1/360s）、10/4 迭代、开启 TOI（同 v1.7.1 的积分精度；子步数固定 → 仍确定）
+  // v1.7.2：一个 DT 内 SUB 个子步、VEL_IT/POS_IT 迭代；TOI（continuousPhysics）+ 下落板 bullet 防穿透（a8c1118 关掉它们导致回归）；子步数固定 → 仍确定
   for (let k = 0; k < SUB; k++) {
     W.bodies.forEach((b, pi) => {
       if (b.s !== 'swing') return; const body = W.plates[pi].body, c = body.getWorldCenter(), rx = c.x - b.pivW[0] / PX;
@@ -223,7 +224,11 @@ export function stepFixed(W, S) {
         if (b.om * ra > 0) { b.om = -b.om * (S.swingBounce || 0); body.setAngularVelocity(b.om); body.setLinearVelocity(Vec2(-b.om * (b.cy - b.pivW[1]) / PX, b.om * (b.cx - b.pivW[0]) / PX)); }
       }
       b.relAng = b.ang - b.ang0;
-      if (Math.abs(b.om) < 0.15) { b.settleT = (b.settleT || 0) + h; if (b.settleT > 0.08) b.settled = true; } else { b.settleT = 0; b.settled = false; }
+      // 静止判定：角速度小，或贴在板/螺丝上时小幅抖动（接触+铰接会形成 ±0.1° 的极限环，om 降不到 0.15）：0.12s 内角度在 0.35° 带内
+      if (b.setRef == null) { b.setRef = b.setLo = b.setHi = b.ang; b.setT2 = 0; }
+      else { b.setLo = Math.min(b.setLo, b.ang); b.setHi = Math.max(b.setHi, b.ang); if (b.setHi - b.setLo > 0.006 || Math.abs(b.om) > 1) { b.setRef = b.setLo = b.setHi = b.ang; b.setT2 = 0; } else b.setT2 += h; }
+      if (Math.abs(b.om) < 0.15) { b.settleT = (b.settleT || 0) + h; } else b.settleT = 0;
+      if (b.settleT > 0.08 || b.setT2 > 0.12) b.settled = true; else b.settled = false;
     } else if (b.s === 'fall') {
       b.tf += h;
       if (b.cy > b.prog.cy + 20) b.prog = { cy: b.cy, t: b.tf };
@@ -296,7 +301,7 @@ export function snapWorld(W) {
   };
 }
 export function restoreWorld(L, bodies, S, snap, obst) {
-  snap.bodies.forEach((r, pi) => { const b = bodies[pi]; if (r.s === 'gone' && b.s === 'gone') return; Object.assign(b, { s: r.s, ang: r.ang, dx: r.dx, dy: r.dy, cx: r.cx, cy: r.cy, n: r.n, lastPiv: r.lastPiv && r.lastPiv.slice(), pivW: r.pivW && r.pivW.slice(), piv: r.piv && r.piv.slice(), ang0: r.ang0, posed: r.posed, ppGhost: r.ppGhost, ghost: r.ghost, rest: r.rest, sup: r.sup ? { s: r.sup.s.slice(), p: r.sup.p.slice() } : null, relAng: r.relAng, tf: r.tf, restT: 0, settleT: 0, settled: false, ppT: 0, prog: { cy: r.cy, t: r.tf }, om: r.w || 0, nudge: false, ghostNow: false }); });
+  snap.bodies.forEach((r, pi) => { const b = bodies[pi]; if (r.s === 'gone' && b.s === 'gone') return; Object.assign(b, { s: r.s, ang: r.ang, dx: r.dx, dy: r.dy, cx: r.cx, cy: r.cy, n: r.n, lastPiv: r.lastPiv && r.lastPiv.slice(), pivW: r.pivW && r.pivW.slice(), piv: r.piv && r.piv.slice(), ang0: r.ang0, posed: r.posed, ppGhost: r.ppGhost, ghost: r.ghost, rest: r.rest, sup: r.sup ? { s: r.sup.s.slice(), p: r.sup.p.slice() } : null, relAng: r.relAng, tf: r.tf, restT: 0, settleT: 0, settled: false, setRef: null, setT2: 0, ppT: 0, prog: { cy: r.cy, t: r.tf }, om: r.w || 0, nudge: false, ghostNow: false }); });
   const W = createWorld(L, bodies, S);
   W.bodies.forEach((b, pi) => {
     const q = W.plates[pi], body = q.body;

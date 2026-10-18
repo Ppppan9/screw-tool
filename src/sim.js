@@ -46,7 +46,7 @@ export function simTick(sim) {
   if (sim.ticks >= 2 && worldSettled(W)) freeze(sim);
   return ev;
 }
-function wake(bodies) { bodies.forEach(b => { if (b.s === 'fall') { b.rest = false; b.sup = null; b.restT = 0; } else if (b.s === 'swing') { b.settled = false; b.settleT = 0; } }); }
+function wake(bodies) { bodies.forEach(b => { if (b.s === 'fall') { b.rest = false; b.sup = null; b.restT = 0; } else if (b.s === 'swing') { b.settled = false; b.settleT = 0; b.setRef = null; b.setT2 = 0; } }); }
 // 静止状态下这一步是否“物理上什么都不发生”（只看快照里的位姿/字段 → 实时与预测判定相同）
 function quietMove(L, S, bodies, vHole, si, h) {
   const vh = vHole.slice(); vh[si] = h; const pins = pinsOf(L, bodies, vh), pinW = pinWOf(L, pins, vh), r = (S.collShaftR ?? 6) + 2, old = vHole[si];
