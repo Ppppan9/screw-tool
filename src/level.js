@@ -83,10 +83,10 @@ function swingPoseAt(L, pi, hi, ang) {
   const sw = { px: h.x, py: h.y, ang, hi };
   sw.poly = p.poly.map(([x, y]) => rotPt(x, y, sw)); sw.holes = p.holes.map(k => rotPt(L.holes[k].x, L.holes[k].y, sw));
   // 预先算好摆动后对准/覆盖的底板孔（求解器/生成器会大量调用）
-  sw.al = new Set(); sw.cov = new Set(); sw.inn = new Set();
+  sw.al = new Set(); sw.cov = new Set(); sw.inn = new Set(); sw.nr = new Set(); // nr：孔中心离轮廓 < SHAFT_NEAR（插进去的螺丝杆会压到板材料）
   L.holes.forEach((h, k) => {
     if (sw.holes.some(([x, y]) => Math.hypot(x - h.x, y - h.y) <= ALIGN_TOL)) { sw.al.add(k); sw.cov.add(k); sw.inn.add(k); }
-    else if (pointInPoly(h.x, h.y, sw.poly)) { sw.cov.add(k); sw.inn.add(k); } else if (distToPoly(h.x, h.y, sw.poly) < edgeTol(L, pi, k)) sw.cov.add(k);
+    else if (pointInPoly(h.x, h.y, sw.poly)) { sw.cov.add(k); sw.inn.add(k); } else { const dd = distToPoly(h.x, h.y, sw.poly); if (dd < edgeTol(L, pi, k)) sw.cov.add(k); if (dd < SHAFT_NEAR) sw.nr.add(k); }
   });
   return sw;
 }
@@ -187,17 +187,18 @@ export function setSwingAngle(L, st, pi, ang) {
 // v1.7.1：通用位姿（直接取物理刚体的变换 x' = R(ang)(x−C) + C + (dx,dy)），用于：
 //  ① 逻辑同步摆动板/重新固定板实际停下的位姿（板可能先绕钉 A 摆、再被别的钉固定、又绕钉 B 摆，单一“绕原支点转角”描述不了）；
 //  ② 画面判定“哪些螺丝固定这块板”时用板的实际位姿（与逻辑同一套覆盖/对准规则，避免逻辑认为被固定而画面上已掉落）。
+const SHAFT_NEAR = 7; // 螺丝杆半径 collShaftR(6) + 1
 export function poseFromXf(L, pi, xf) {
   const p = L.plates[pi], c = Math.cos(xf.ang), s = Math.sin(xf.ang);
   const T = (x, y) => { const ux = x - xf.C[0], uy = y - xf.C[1]; return [xf.C[0] + c * ux - s * uy + xf.dx, xf.C[1] + s * ux + c * uy + xf.dy]; };
   const sw = { ang: xf.ang, dx: xf.dx, dy: xf.dy, C: xf.C, hi: xf.hi ?? -1, xf: true };
   sw.poly = p.poly.map(([x, y]) => T(x, y)); sw.holes = p.holes.map(k => T(L.holes[k].x, L.holes[k].y));
-  sw.al = new Set(); sw.cov = new Set(); sw.inn = new Set();
+  sw.al = new Set(); sw.cov = new Set(); sw.inn = new Set(); sw.nr = new Set(); // nr：孔中心离轮廓 < SHAFT_NEAR（插进去的螺丝杆会压到板材料）
   let bx0 = 1e9, by0 = 1e9, bx1 = -1e9, by1 = -1e9; for (const [x, y] of sw.poly) { if (x < bx0) bx0 = x; if (x > bx1) bx1 = x; if (y < by0) by0 = y; if (y > by1) by1 = y; }
   L.holes.forEach((h, k) => {
     if (h.x < bx0 - EDGE_TOL - ALIGN_TOL || h.x > bx1 + EDGE_TOL + ALIGN_TOL || h.y < by0 - EDGE_TOL - ALIGN_TOL || h.y > by1 + EDGE_TOL + ALIGN_TOL) return;
     if (sw.holes.some(([x, y]) => Math.hypot(x - h.x, y - h.y) <= ALIGN_TOL)) { sw.al.add(k); sw.cov.add(k); sw.inn.add(k); }
-    else if (pointInPoly(h.x, h.y, sw.poly)) { sw.cov.add(k); sw.inn.add(k); } else if (distToPoly(h.x, h.y, sw.poly) < edgeTol(L, pi, k)) sw.cov.add(k);
+    else if (pointInPoly(h.x, h.y, sw.poly)) { sw.cov.add(k); sw.inn.add(k); } else { const dd = distToPoly(h.x, h.y, sw.poly); if (dd < edgeTol(L, pi, k)) sw.cov.add(k); if (dd < SHAFT_NEAR) sw.nr.add(k); }
   });
   return sw;
 }
@@ -234,7 +235,7 @@ export function done(L, st) { return st.removed.size === L.plates.length && !(st
 //   st.rest: pi → { pose, scr: [[si, hole]], pl: [pj] }
 function restCovers(st, hi, strict) {
   if (!st.rest || !st.rest.size) return false;
-  for (const r of st.rest.values()) if (r.pose.inn.has(hi) && (!strict || !r.pose.al.has(hi))) return true; // v1.7.2：放螺丝（非 strict）连对准的孔也挡——否则螺丝插进被托住板的孔，板随后下落时穿过螺丝杆 // 被托住的板只挡中心在其轮廓内的孔（贴边不挡，避免堆积时整盘无孔可用）
+  for (const r of st.rest.values()) if (strict ? (r.pose.inn.has(hi) && !r.pose.al.has(hi)) : (r.pose.inn.has(hi) || (r.pose.nr && r.pose.nr.has(hi)))) return true; // v1.7.2：放螺丝（非 strict）连对准的孔也挡——否则螺丝插进被托住板的孔，板随后下落时穿过螺丝杆 // 被托住的板只挡中心在其轮廓内的孔（贴边不挡，避免堆积时整盘无孔可用）
   return false;
 }
 export function setRest(L, st, pi, xf, sup) {
