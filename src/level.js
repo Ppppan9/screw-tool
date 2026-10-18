@@ -236,7 +236,14 @@ export function solve(L, st0, maxNodes = 20000) {
 export function mulberry(seed) { return () => { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
 export function generateLevel(o, seed) {
   for (let tries = 0; tries < 60; tries++) {
-    const rnd = mulberry(seed + tries * 7919);
+    const L = buildRandom(o, mulberry(seed + tries * 7919)); if (!L) continue;
+    const st = initState(L);
+    if (solve(L, st, 6000)) return L;
+  }
+  return referenceLevel();
+}
+export function buildRandom(o, rnd) {
+  {
     const L = { plates: [], holes: [], screws: [], base: { polys: [], capsules: [] }, name: 'random' };
     const cx = 360, cy = o.genCenterY, W = o.genCols * (o.genPlateW + o.genGap), H = o.genRows * (o.genPlateH + o.genGap);
     const x0 = cx - W / 2, y0 = cy - H / 2;
@@ -254,26 +261,32 @@ export function generateLevel(o, seed) {
         if (px + pw > x0 + W + 4 || py + ph > y0 + H + 4) continue;
         const poly = [[px, py], [px + pw, py], [px + pw, py + ph], [px, py + ph]];
         const n = Math.max(1, Math.min(o.screwsPerPlate, span * 2));
-        const hs = [];
+        const hp = [];
         for (let k = 0; k < n; k++) {
           const t = n === 1 ? 0.5 : 0.22 + 0.56 * k / (n - 1);
-          hs.push(holeAt(horiz ? px + pw * t : px + pw / 2, horiz ? py + ph / 2 : py + ph * t));
+          hp.push([horiz ? px + pw * t : px + pw / 2, horiz ? py + ph / 2 : py + ph * t]);
         }
+        // v1.7 修复：上层板不能盖住下层已有的孔（阻挡规则下那颗螺丝既固定上层板又被它压住 → 必然无解）
+        if (L.holes.some(h => !hp.some(([x, y]) => Math.hypot(h.x - x, h.y - y) < 6) && (pointInPoly(h.x, h.y, poly) || distToPoly(h.x, h.y, poly) < 18))) continue;
+        const hs = hp.map(([x, y]) => holeAt(x, y));
         L.plates.push({ poly, layer, holes: [...new Set(hs)], radius: 12 });
       }
     }
-    if (!L.plates.length) continue;
-    L.plates.forEach(p => p.holes.forEach(h => { if (!L.screws.some(s => s.hole === h)) L.screws.push({ hole: h }); }));
-    // 空孔：放在空白处
-    let tries2 = 0, made = 0;
-    while (made < o.emptyHoles && tries2++ < 400) {
-      const x = x0 + rnd() * W, y = y0 + rnd() * H;
-      if (L.holes.some(h => Math.hypot(h.x - x, h.y - y) < 46)) continue;
-      L.holes.push({ x, y }); made++;
+    if (!L.plates.length) return null;
+    // v1.7 修复（自 v1.4 起随机关总是因为空孔落在板下而无解、回退成参考关卡）：空孔必须露在外面。
+    // 先找没有任何板覆盖的空白位置；不够时随机拿掉一块最上层的板，它的孔若未被其它板覆盖就成为空孔。
+    const uncovered = (x, y, m) => !L.plates.some(p => pointInPoly(x, y, p.poly) || distToPoly(x, y, p.poly) < m);
+    const openHoles = () => L.holes.filter(h => uncovered(h.x, h.y, 4) && !L.plates.some(p => p.holes.some(k => L.holes[k] === h))).length;
+    let tries2 = 0, guard = 0;
+    while (openHoles() < o.emptyHoles && guard++ < 40) {
+      let placed = false;
+      while (tries2++ < 400) { const x = x0 + rnd() * W, y = y0 + rnd() * H; if (L.holes.some(h => Math.hypot(h.x - x, h.y - y) < 46) || !uncovered(x, y, 18)) continue; L.holes.push({ x, y }); placed = true; break; }
+      if (placed) continue;
+      const top = Math.max(...L.plates.map(p => p.layer)), cand = L.plates.map((p, i) => p.layer === top ? i : -1).filter(i => i >= 0);
+      if (L.plates.length <= 2) break; L.plates.splice(cand[Math.floor(rnd() * cand.length)], 1);
     }
+    L.plates.forEach(p => p.holes.forEach(h => { if (!L.screws.some(s => s.hole === h)) L.screws.push({ hole: h }); }));
     // 把空孔设为不被覆盖：若被板覆盖则无效，交给求解器判定
-    const st = initState(L);
-    if (solve(L, st, 6000)) return L;
+    return L;
   }
-  return referenceLevel();
 }

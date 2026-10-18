@@ -3,7 +3,7 @@ import { newBody, toWorld, inPoly } from '../src/physics.js';
 import { createWorld, stepWorld } from '../src/world.js';
 import { offsetPoly } from '../src/geom.js';
 let fails = 0; const ok = (c, m) => { console.log((c ? 'PASS ' : 'FAIL ') + m); if (!c) fails++; };
-const S0 = { gravity: 3600, swingBoost: 2.2, swingMax: 17, swingDamp: 6, swingBounce: 0.05, swingKick: 0, releaseSpinK: 8.3, fallSpin: 0, collide: true, collShaftR: 6, collRest: 0.2, collFric: 0.3, plateCollide: true, ppRest: 0.1, ppFric: 0.4, angDamp: 0.6, collStuckMs: 2000, plateHoleSize: 33 };
+const S0 = { gravity: 3600, swingBoost: 2.2, swingMax: 17, swingDamp: 6, swingBounce: 0.05, swingKick: 0, releaseSpinK: 8.3, fallSpin: 0, collide: true, collShaftR: 6, collRest: 0.2, collFric: 0.3, plateCollide: true, ppRest: 0.1, ppFric: 0.4, angDamp: 0.6, collStuckMs: 1200, plateHoleSize: 33 };
 const rect = (x0, y0, x1, y1) => [[x0, y0], [x1, y0], [x1, y1], [x0, y1]];
 const R2D = 180 / Math.PI;
 // plates: [{poly, pins: frame => n, pinW}] ; obst: screws

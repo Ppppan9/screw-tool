@@ -1,0 +1,29 @@
+// v1.7：参考/随机/图形关卡全程自动通关，检查没有板卡在画面上（npm run test:autoall）
+import { chromium } from 'playwright-core';
+const b = await chromium.launch({ executablePath: '/usr/bin/google-chrome', headless: true });
+const cases = [['reference', {}], ['random', { seed: 1 }], ['random', { seed: 7 }], ['random', { seed: 42, genLayers: 3 }], ['image', {}]];
+let fails = 0;
+for (const [level, extra] of cases) {
+  const p = await b.newPage({ viewport: { width: 900, height: 1300 } });
+  await p.goto('file://' + process.cwd() + '/index.html'); await p.waitForTimeout(300);
+  const r = await p.evaluate(([level, extra]) => new Promise(res => {
+    const G = __game; for (const k in extra) G.S[k] = extra[k]; G.set('level', level); G.newGame();
+    const t0 = performance.now(); let maxFall = 0, swingSync = 0; const angs = new Map();
+    G.autoSolve();
+    const tick = () => {
+      const pv = G.plateVis, t = performance.now() - t0;
+      maxFall = Math.max(maxFall, pv.filter(b => b.s === 'fall').length);
+      G.st.swing.forEach((sw, pi) => { if (Math.abs(sw.ang) < 16.9 * Math.PI / 180 && !angs.has(pi)) { angs.set(pi, +(sw.ang * 57.2958).toFixed(1)); swingSync++; } });
+      const fin = window.__finished && pv.every(b => b.s === 'gone');
+      if (fin || t > 150000) return res({ fin: !!fin, ms: Math.round(t), plates: pv.length, removed: G.st.removed.size, onScreen: pv.filter(b => b.s !== 'gone').map(b => b.s), maxFallTogether: maxFall, ppHits: pv.reduce((s, b) => s + b.pHits, 0), psHits: pv.reduce((s, b) => s + b.hits, 0), platesHitPlate: pv.filter(b => b.pHits > 0).length, platesHitScrew: pv.filter(b => b.hits > 0).length, ghosts: pv.filter(b => b.ghost).length, swingSyncedAngles: [...angs.values()] });
+      requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  }), [level, extra]);
+  const ok = r.fin && r.removed === r.plates;
+  if (!ok) fails++;
+  console.log((ok ? 'PASS ' : 'FAIL ') + level + JSON.stringify(extra) + ' ' + JSON.stringify(r));
+  await p.close();
+}
+await b.close();
+console.log(fails ? 'AUTOALL FAIL' : 'AUTOALL OK'); process.exit(fails ? 1 : 0);

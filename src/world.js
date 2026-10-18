@@ -166,7 +166,7 @@ export function stepWorld(W, pins, pinW, dt, S, obst) {
     } else if (b.s === 'fall') {
       b.tf += h;
       if (b.cy > b.prog.cy + 20) b.prog = { cy: b.cy, t: b.tf };
-      else if (!b.ghost && (b.tf - b.prog.t) * 1000 > (S.collStuckMs ?? 2000)) {
+      else if (!b.ghost && (b.tf - b.prog.t) * 1000 > (S.collStuckMs ?? 1200)) {
         // 卡住（被板/螺丝托住太久）：关闭它的碰撞，让它穿过障碍掉出画面——保证画面上不会永久留下逻辑上已掉落的板
         b.ghost = true; for (let f = body.getFixtureList(); f; f = f.getNext()) f.setFilterData({ groupIndex: 0, categoryBits: 1, maskBits: 0 });
         body.setAwake(true);
