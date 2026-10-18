@@ -17,7 +17,10 @@
     "test:autoall": "node test/autosolve-all.mjs",
     "test:overlap": "node test/overlap-test.mjs",
     "test:cover": "node test/fixture-cover.mjs",
-    "test:rest": "node test/rest-screw-test.mjs"
+    "test:rest": "node test/rest-screw-test.mjs",
+    "test:ae:classic": "AE_THEME=classic AE_ZIP=/workspace/screw_ae_sample_classic.zip AE_OUT=/tmp/screw_ae_classic node test/ae-export.mjs && node test/ae-mock.mjs /workspace/screw_ae_sample_classic.zip && CHECK_OUT=screenshots/ae_export_check_classic.jpg node test/ae-composite.mjs /workspace/screw_ae_sample_classic.zip /tmp/screw_ae_classic/snaps",
+    "test:3d:classic": "E3D=1 AE_THEME=classic AE_ZIP=/tmp/screw_ae_classic_3d.zip E3D_ZIP=/workspace/screw_3d_sample_classic.zip AE_OUT=/tmp/screw_ae_classic3d node test/ae-export.mjs && SNAP=/tmp/screw_ae_classic3d/snaps E3D_ZIP=/workspace/screw_3d_sample_classic.zip E3D_DIR=/tmp/screw_e3d_classic E3D_CMP=screenshots/export3d_blender_compare_classic.jpg bash test/export3d-blender.sh",
+    "test:foot": "esbuild test/_foot.mjs --bundle --platform=node --format=esm --loader:.jpg=dataurl --log-level=warning --outfile=/tmp/screw-foot.mjs && node /tmp/screw-foot.mjs"
   },
   "repository": {
     "type": "git",

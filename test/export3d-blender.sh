@@ -4,14 +4,14 @@
 set -e
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 BL=${BLENDER:-/workspace/blender/blender-4.2.3-linux-x64/blender}
-D=/tmp/screw_e3d; SNAP=/tmp/screw_ae/snaps; ZIP=/workspace/screw_3d_sample.zip
+D=${E3D_DIR:-/tmp/screw_e3d}; SNAP=${SNAP:-/tmp/screw_ae/snaps}; ZIP=${E3D_ZIP:-/workspace/screw_3d_sample.zip}; OUTJ=${E3D_CMP:-$ROOT/screenshots/export3d_blender_compare.jpg}
 rm -rf $D && mkdir -p $D/zip $D/bl
 python3 -c "import zipfile; zipfile.ZipFile('$ZIP').extractall('$D/zip')"
 PICK=$(python3 -c "import json;s=json.load(open('$SNAP/snaps.json'));k=sorted(s);n=len(k);print(','.join(k[i] for i in sorted(set([0,n//5,2*n//5,3*n//5,4*n//5,n-1]))))")
 T=$(python3 -c "import json;s=json.load(open('$SNAP/snaps.json'));print(','.join('%.4fs'%s[f] for f in '$PICK'.split(',')))")
 cd $D/zip
 "$BL" --background --factory-startup --python blender_import.py -- --engine CYCLES --samples ${SAMPLES:-16} --fbx --render $T --out $D/bl 2>&1 | grep -E "EXPORT3D_REPORT|Traceback|Error" | tee $D/blender_report.txt
-python3 $ROOT/test/export3d_compare.py $D $SNAP $ROOT/screenshots/export3d_blender_compare.jpg $PICK | tee -a $D/blender_report.txt
+python3 $ROOT/test/export3d_compare.py $D $SNAP $OUTJ $PICK | tee -a $D/blender_report.txt
 python3 - <<PY
 import zipfile
 z = zipfile.ZipFile('$ZIP', 'a', zipfile.ZIP_STORED)
