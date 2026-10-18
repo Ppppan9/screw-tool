@@ -74,7 +74,7 @@ export function createAERecorder(api) {
     const plateA = L.plates.map((p, pi) => {
       const sp = E.sprites[pi], c = mk(sp.c.width, sp.c.height), g = c.getContext('2d');
       g.drawImage(sp.c, 0, 0); g.setTransform(sp.c.width / sp.w, 0, 0, sp.c.height / sp.h, -sp.x * sp.c.width / sp.w, -sp.y * sp.c.height / sp.h);
-      p.holes.forEach(h => drawHole(g, L.holes[h].x, L.holes[h].y, S));
+      // v1.6：板孔已在贴图里镂空（透明），不再盖暗孔
       const a = addAsset('plate_' + String(pi + 1).padStart(2, '0'), 'plates', c, `板块_${pi + 1}.png`);
       // 投影：与网页相同的 shadowBlur/offset（画布像素），只保留阴影
       const pad = Math.ceil(12 * v.k), sc = mk(sp.c.width + pad * 2, sp.c.height + pad * 2), sg = sc.getContext('2d');

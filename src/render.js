@@ -103,7 +103,7 @@ export function drawBase(ctx, L, S) {
   ctx.strokeStyle = S.baseOutline; ctx.lineWidth = S.outlineW; ctx.lineJoin = 'round'; basePath(ctx, L); ctx.stroke();
   o.save(); o.setTransform(1, 0, 0, 1, 0, 0); o.drawImage(c2, 0, 0); o.restore();
 }
-export function plateSprite(pl, S0, idx, dpr) {
+export function plateSprite(pl, S0, idx, dpr, holePts = []) {
   const S = pl.tint ? { ...S0, plateColor: mixHex(S0.plateColor, pl.tint, S0.plateTintAmt ?? 0.35) } : S0;
   const bb = bbox(pl.poly), pad = 14 + S.plateThick;
   const c = document.createElement('canvas'); c.width = Math.ceil((bb.w + pad * 2) * dpr); c.height = Math.ceil((bb.h + pad * 2) * dpr);
@@ -132,7 +132,20 @@ export function plateSprite(pl, S0, idx, dpr) {
   }
   ctx.restore();
   shapePath(ctx, pl.poly, r, pl.smooth); ctx.lineJoin = 'round'; ctx.lineWidth = S.outlineW; ctx.strokeStyle = S.plateOutline; ctx.stroke();
+  // v1.6 板孔 = 真正的镂空（参考：透过板孔看到粉色底板 / 下层板 / 对准时底板的暗孔），带孔缘描边、上沿孔壁阴影、外圈光泽
+  holePts.forEach(([hx, hy]) => plateHoleCut(ctx, hx, hy, S));
   return { c, x: bb.x - pad, y: bb.y - pad, w: bb.w + pad * 2, h: bb.h + pad * 2 };
+}
+export function plateHoleCut(ctx, x, y, S) {
+  const rh = (S.plateHoleSize || S.holeSize + 3) / 2, wall = S.plateHoleWall ?? 2.6;
+  // 外圈光泽（孔缘被倒角受光，参考板孔外一圈白亮边，右下更亮）
+  ctx.save(); ctx.filter = 'blur(0.8px)'; ctx.beginPath(); ctx.arc(x + 0.6, y + 0.9, rh + 2.4, 0, 7); ctx.lineWidth = 2.6; ctx.strokeStyle = `rgba(255,253,255,${0.7 * (S.plateGloss ?? 1)})`; ctx.stroke(); ctx.restore();
+  // 镂空
+  ctx.save(); ctx.globalCompositeOperation = 'destination-out'; ctx.beginPath(); ctx.arc(x, y, rh, 0, 7); ctx.fillStyle = '#000'; ctx.fill(); ctx.restore();
+  // 孔壁：上沿可见一条板厚的暗壁（孔圆 − 下移 wall 的孔圆）
+  if (wall > 0) { ctx.save(); ctx.beginPath(); ctx.arc(x, y, rh, 0, 7); ctx.clip(); ctx.beginPath(); ctx.arc(x, y, rh + 1, 0, 7); ctx.arc(x, y + wall, rh, 0, 7, true); ctx.fillStyle = shade(S.plateShade || '#7b70ad', -0.15); ctx.globalAlpha = 0.92; ctx.fill('evenodd'); ctx.restore(); }
+  // 孔缘描边
+  ctx.beginPath(); ctx.arc(x, y, rh, 0, 7); ctx.lineWidth = Math.max(1.2, S.outlineW * 0.75); ctx.strokeStyle = S.plateOutline; ctx.stroke();
 }
 export function drawHole(ctx, x, y, S) {
   // 参考：深红棕孔内 #2c160f，下缘奶白色斜面月牙（孔壁受光），上缘略暗凹陷

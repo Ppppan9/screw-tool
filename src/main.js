@@ -57,7 +57,7 @@ function rebuild() {
   const dpr = view().k * S.boardScale * Math.max(1, Math.min(3, window.devicePixelRatio || 1));
   bgCanvas = document.createElement('canvas'); bgCanvas.width = cv.width; bgCanvas.height = cv.height;
   drawBackground(bgCanvas, S, cv.width, cv.height, view().k, bgImg);
-  sprites = L.plates.map((p, i) => plateSprite(p, S, i, Math.max(1, dpr)));
+  sprites = L.plates.map((p, i) => plateSprite(p, S, i, Math.max(1, dpr), p.holes.map(h => [L.holes[h].x, L.holes[h].y])));
   if (!plateVis || plateVis.length !== L.plates.length) plateVis = L.plates.map((p, i) => newBody(p.poly, [sprites[i].x + sprites[i].w / 2, sprites[i].y + sprites[i].h / 2]));
   baseCanvas = document.createElement('canvas'); baseCanvas.width = Math.ceil(720 * dpr); baseCanvas.height = Math.ceil(1280 * dpr);
   const bc = baseCanvas.getContext('2d'); bc.scale(dpr, dpr); drawBase(bc, L, S);
@@ -164,7 +164,7 @@ function draw(t) {
       if (b.posed) { ctx.translate(b.C[0] + b.dx, b.C[1] + b.dy); ctx.rotate(b.ang); ctx.translate(-b.C[0], -b.C[1]); }
       ctx.shadowColor = `rgba(20,10,30,${S.plateShadow})`; ctx.shadowBlur = 6 * v.k; ctx.shadowOffsetY = 3 * v.k;
       ctx.drawImage(sp.c, sp.x, sp.y, sp.w, sp.h); ctx.shadowColor = 'transparent';
-      p.holes.forEach(h => drawHole(ctx, L.holes[h].x, L.holes[h].y, S)); ctx.restore();
+      ctx.restore();
     });
     L.screws.forEach((_, si) => { if (screwLayer(si) === lay) drawS(si); });
   }
@@ -172,7 +172,7 @@ function draw(t) {
     if (pv.s !== 'fall') return; const sp = sprites[pi], p = L.plates[pi];
     ctx.save(); if (S.fallFade) ctx.globalAlpha = Math.max(0, 1 - pv.dy / 800);
     ctx.translate(pv.C[0] + pv.dx, pv.C[1] + pv.dy); ctx.rotate(pv.ang); ctx.translate(-pv.C[0], -pv.C[1]);
-    ctx.drawImage(sp.c, sp.x, sp.y, sp.w, sp.h); p.holes.forEach(h => drawHole(ctx, L.holes[h].x, L.holes[h].y, S)); ctx.restore();
+    ctx.drawImage(sp.c, sp.x, sp.y, sp.w, sp.h); ctx.restore();
   });
   moving.forEach(si => { const sv = screwVis[si]; drawScrew(ctx, sv.x, sv.y, S, sv.ang, sv.lift, sv.sc); });
   if (S.debugPins) drawPinDebug();

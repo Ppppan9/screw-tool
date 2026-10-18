@@ -1,5 +1,5 @@
 // 设置定义：所有可调参数。版本号 + 迁移。
-export const SETTINGS_VERSION = 9;
+export const SETTINGS_VERSION = 10;
 export const STORE_KEY = 'screwTool.settings';
 // [key, 标签, 类型, 默认, min, max, step]  类型: range/color/bool/select/text/file
 export const GROUPS = [
@@ -84,7 +84,9 @@ export const GROUPS = [
     ['screwCross', '十字槽颜色', 'color', '#2a2748'],
     ['crossLen', '十字槽臂长(×半径)', 'range', 0.6, 0.2, 0.9, 0.01],
     ['crossW', '十字槽宽(×半径)', 'range', 0.34, 0.05, 0.5, 0.01],
-    ['holeSize', '孔直径(px)', 'range', 30, 12, 60, 1],
+    ['holeSize', '底板孔直径(px)', 'range', 30, 12, 60, 1],
+    ['plateHoleSize', '板孔直径(px，镂空，参考≈33)', 'range', 33, 12, 64, 0.5],
+    ['plateHoleWall', '板孔上沿孔壁厚(px)', 'range', 2.6, 0, 8, 0.1],
     ['holeColor', '孔颜色', 'color', '#2a140d'],
   ]],
   ['动画时长', [
@@ -218,6 +220,8 @@ export function migrate(obj) {
   if (v < 8) { if (s.gravity === 5200) delete s.gravity; delete s.fallDelay; v = 8; }
   // v8 -> v9（v1.4.1 螺丝动画时长对齐参考逐帧实测）：仍等于旧默认值的才替换为新默认
   if (v < 9) { const OLD = { liftDur: 140, flyDur: 230, screwInDur: 130, hoverBob: 2 }; for (const k in OLD) if (s[k] === OLD[k]) delete s[k]; v = 9; }
+  // v9 -> v10（v1.6）：新增板孔镂空(plateHoleSize/plateHoleWall)与下落碰撞参数——只补默认
+  if (v < 10) v = 10;
   const out = { ...DEFS };
   for (const k in DEFS) if (k in s && typeof s[k] === typeof DEFS[k]) out[k] = s[k];
   return out;

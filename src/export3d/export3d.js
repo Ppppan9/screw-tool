@@ -61,9 +61,11 @@ export async function export3D({ S, ae, env, drawTextsTo, drawEndTo }) {
   L.plates.forEach((p, pi) => {
     const s = rec.plates[pi]; if (s[0][1] === 2) return;
     const sp = env.sprites[pi], c = mk(sp.c.width, sp.c.height), g2 = c.getContext('2d');
-    g2.drawImage(sp.c, 0, 0); g2.setTransform(sp.c.width / sp.w, 0, 0, sp.c.height / sp.h, -sp.x * sp.c.width / sp.w, -sp.y * sp.c.height / sp.h); p.holes.forEach(h => drawHole(g2, L.holes[h].x, L.holes[h].y, S));
+    g2.drawImage(sp.c, 0, 0); g2.setTransform(sp.c.width / sp.w, 0, 0, sp.c.height / sp.h, -sp.x * sp.c.width / sp.w, -sp.y * sp.c.height / sp.h);
     const ctr = P(sp.x + sp.w / 2, sp.y + sp.h / 2), cx = X(ctr[0]), cz = Z(ctr[1]);
-    const g = extrude(p.poly.map(([x, y]) => { const d = P(x, y); return [X(d[0]) - cx, Z(d[1]) - cz]; }), TH);
+    // v1.6：板孔是真正的孔（挤出带洞），贴面贴图在孔处透明
+    const rh = (S.plateHoleSize || S.holeSize + 3) / 2, hp = (x0, y0) => Array.from({ length: 28 }, (_, i) => { const t = -i / 28 * Math.PI * 2, d = P(x0 + Math.cos(t) * rh, y0 + Math.sin(t) * rh); return [X(d[0]) - cx, Z(d[1]) - cz]; });
+    const g = extrude(p.poly.map(([x, y]) => { const d = P(x, y); return [X(d[0]) - cx, Z(d[1]) - cz]; }), TH, p.holes.map(h => hp(L.holes[h].x, L.holes[h].y)));
     const o = P(sp.x, sp.y); planarUV(g, o[0], o[1], sp.w * v.b, sp.h * v.b, cx, cz);
     const nm = `plate_${String(pi + 1).padStart(2, '0')}`;
     const vis = new THREE.Group(); vis.name = nm + '_vis'; plates.add(vis);
