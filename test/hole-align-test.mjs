@@ -40,7 +40,7 @@ for (let i = 0; i < 100; i++) { if (await p.evaluate(() => __game.plateVis.some(
 R.fallingBlocked = await p.evaluate(h => !__game.holeTargetable(h), h22r);
 await idle(); await liftF();
 await p.evaluate(() => __game.tapXY(426, 754)); await W(20);
-R.fallDy = await p.evaluate(() => Math.round(Math.max(...__game.plateVis.filter(b => b.s === 'fall').map(b => b.dy)))); await p.evaluate(() => { __game.S.gravity = 3600; });
+R.fallDy = await p.evaluate(() => Math.round(Math.max(...__game.plateVis.filter(b => b.s === 'fall').map(b => b.dy)))); await p.evaluate(() => { __game.S.gravity = 3600; __game.world.pw.setGravity({ x: 0, y: 3600 / 50 }); }); // v1.7.2：世界重力在建世界/恢复快照时设定，进行中的下落要同步改实时世界
 R.duringFall = { accepted: (await screwAt(hFinger)) !== sF, plateState: await p.evaluate(() => __game.plateVis.map(b => b.s).filter(s => s !== 'on').join(',')) };
 await W(1500); await idle();
 // 板离开后，原先被盖住的底板孔露出 → 可放

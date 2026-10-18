@@ -9,10 +9,12 @@ const cases = ONLY ? cases0.filter(c => c[0] === ONLY) : cases0;
 const out = []; let fail = 0;
 for (const [n, opt] of cases) {
   const url = 'data:image/png;base64,' + fs.readFileSync(`test/assets/shapes/${n}.png`).toString('base64');
-  await p.evaluate(([u, o]) => { Object.assign(__game.S, o); __game.set('shapeImg', u); }, [url, opt]);
-  await p.waitForFunction(() => __game.L.name === 'image' && __game.L.base.inner !== undefined, null, { timeout: 15000 }).catch(() => {});
+  // v1.7.2：记录生成耗时（物理求解验证）。set 同步部分 = 图片未加载时先用默认图形生成一次；之后图片 onload 再生成目标关卡
+  const gen = await p.evaluate(([u, o]) => new Promise(res => { Object.assign(__game.S, o); const t0 = performance.now(); __game.set('shapeImg', u); const t1 = performance.now(), L1 = __game.L;
+    const poll = () => { const L = __game.L; if (L !== L1 && L.name === 'image' && L.base.inner !== undefined) return res({ syncMs: Math.round(t1 - t0), totalMs: Math.round(performance.now() - t0) }); if (performance.now() - t0 > 180000) return res({ syncMs: Math.round(t1 - t0), totalMs: -1 }); setTimeout(poll, 5); }; setTimeout(poll, 0); }), [url, opt]);
   await p.waitForTimeout(500);
   const info = await p.evaluate(() => ({ name: __game.L.name, plates: __game.L.plates.length, screws: __game.L.screws.length, holes: __game.L.holes.length, inner: (__game.L.base.inner || []).length, outer: __game.L.base.polys.length, layers: Math.max(...__game.L.plates.map(q => q.layer)) + 1, attempts: __game.L.attempts }));
+  info.genMs = gen.totalMs; info.genSyncMs = gen.syncMs;
   fs.writeFileSync(`/tmp/shape_${n}.png`, Buffer.from((await p.evaluate(() => stage.toDataURL())).split(',')[1], 'base64'));
   await p.evaluate(() => { window.__finished = false; Object.assign(__game.S, { autoSpeed: 4, delayMin: 0, delayMax: 20, moveMin: 60, moveMax: 60, autoSelectGap: 0, autoStartDelay: 0, liftDur: 40, flyDur: 80, screwInDur: 40, fallDelay: 0 }); __game.autoSolve(); });
   const t0 = Date.now(); while (!(await p.evaluate(() => window.__finished)) && Date.now() - t0 < 300000) { await p.waitForTimeout(200); }
