@@ -8,7 +8,7 @@ const rect = (x0, y0, x1, y1) => [[x0, y0], [x1, y0], [x1, y1], [x0, y1]];
 const R2D = 180 / Math.PI;
 // plates: [{poly, pins: frame => n, pinW}] ; obst: screws
 function sim(plates, obst = [], S = S0, frames = 240) {
-  const L = { plates: plates.map(p => ({ poly: p.poly })) };
+  const L = { plates: plates.map(p => ({ poly: p.poly, layer: p.layer || 0 })) };
   const B = plates.map(p => { const xs = p.poly.map(v => v[0]), ys = p.poly.map(v => v[1]); return newBody(p.poly, [(Math.min(...xs) + Math.max(...xs)) / 2, (Math.min(...ys) + Math.max(...ys)) / 2]); });
   const W = createWorld(L, B, S), track = [], pen = { pp: 0, ps: 0 };
   for (let f = 0; f < frames; f++) {
@@ -24,7 +24,7 @@ function sim(plates, obst = [], S = S0, frames = 240) {
 }
 function edgeDist([x, y], P) { let d = 1e9; for (let i = 0, j = P.length - 1; i < P.length; j = i++) { const [ax, ay] = P[j], [bx, by] = P[i], dx = bx - ax, dy = by - ay, t = Math.max(0, Math.min(1, ((x - ax) * dx + (y - ay) * dy) / (dx * dx + dy * dy || 1))); d = Math.min(d, Math.hypot(ax + t * dx - x, ay + t * dy - y)); } return d; }
 const fallAt = (f0) => f => f < f0 ? 1 : 0, pinned = () => 2;
-const P = (poly, pins, pinW) => ({ poly, pins, pinW });
+const P = (poly, pins, pinW, layer = 0) => ({ poly, pins, pinW, layer });
 
 // ---- 板-螺丝 ----
 const free = sim([P(rect(240, 280, 360, 320), fallAt(1), [300, 300])]);
@@ -57,8 +57,8 @@ const two = sim(Object.assign([P(rect(260, 100, 340, 140), fallAt(1), [300, 120]
 ok(two.B[0].pHits > 0 && two.B[1].pHits > 0 && two.pen.pp < 1.5, `两块下落板互相碰撞不穿透（最大穿透 ${two.pen.pp.toFixed(2)}px）`);
 const pOff = sim([P(rect(250, 200, 350, 240), fallAt(1), [300, 220]), P(rect(200, 400, 420, 440), pinned)], [], { ...S0, plateCollide: false });
 ok(pOff.track[40][0][2] > 450, '关闭板-板碰撞：直接穿过');
-// 叠放（释放时重叠）的板互相穿过，分开后恢复碰撞
-const stack = sim([P(rect(250, 200, 350, 260), fallAt(1), [300, 230]), P(rect(280, 230, 420, 280), pinned), P(rect(200, 500, 420, 540), pinned)], [], S0, 60);
+// 叠放（释放时重叠）的板互相穿过，分开后恢复碰撞（v1.7.1：只有不同层的板才会叠放穿过，上层板 layer 1）
+const stack = sim([P(rect(250, 200, 350, 260), fallAt(1), [300, 230], 1), P(rect(280, 230, 420, 280), pinned), P(rect(200, 500, 420, 540), pinned)], [], S0, 60);
 ok(stack.track[30][0][2] > 300 && stack.B[0].pHits > 0 && stack.track[59][0][2] < 500, `释放时叠放的板：穿过下层板（不弹飞），分开后撞到下方另一块板（cy ${stack.track[30][0][2]}→${stack.track[59][0][2]}）`);
 // 摆动板被同层固定板挡住：停在 < swingMax
 const swingPins = f => f < 2 ? 2 : 1;
