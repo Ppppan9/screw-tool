@@ -110,3 +110,4 @@
   - 下一步：autoall 经典款、npm test、test:ae、test:3d、test:norec、test:collision（逐个）；screenshots/bigfoot_ref_vs_tool.jpg；README；发布。
   - 对比截图 screenshots/bigfoot_ref_vs_tool.jpg 复核：脚形/灰金属板深描边/银十字螺丝/脚跟黑孔/米色脚跟板/米白丝绸背景均一致，无需修改。
   - test:autoall 6/6 通过（含 reference{theme:classic}：21 板 36 步 78.7s；abort/nudge/ghost/mispredict 均 0）。下一步 npm test → test:ae → test:3d → test:norec → test:collision → test:logic → 发布。
+  - npm test 通过（25/25，rec mp4 16.8MB，errs 0）；test:ae 通过（621 层 8761 key，PSNR avg 35.9 min 28.7）；test:3d 通过（BLENDER PASS，PSNR 26.5–29.4）。下一步 test:norec → test:collision → test:logic。
