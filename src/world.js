@@ -212,7 +212,7 @@ export function stepWorld(W, pins, pinW, dt, S, obst) {
       if (b.restT > 0.15) {
         const sup = { s: [], p: [] };
         for (let e = body.getContactList(); e; e = e.next) { if (!e.contact.isTouching() || !e.contact.isEnabled()) continue; const u = e.other.getUserData(); if (!u) continue; if (u.k === 's') sup.s.push(u.sid); else if (u.k === 'p') sup.p.push(u.pi); }
-        b.rest = sup.s.length + sup.p.length > 0; b.sup = sup;
+        b.rest = sup.s.length + sup.p.length > 0; b.sup = sup; if (b.rest && sup.s.length) b.everRest = true;
       } else if (!still) { b.rest = false; b.sup = null; }
       // 只被其它板托住（没有螺丝支撑）超过 ppStuckMs → 只关闭它与板的碰撞（仍会被螺丝杆挡住）。紧密单层关卡里几乎每块下落板都会
       // 先压在下方邻板的上边缘，若全都永久托住，整盘空孔很快被盖满而无解；用户反馈的“被下方螺丝挡住”则永久托住。
