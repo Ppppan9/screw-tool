@@ -216,8 +216,11 @@ export function stepWorld(W, pins, pinW, dt, S, obst) {
       } else if (!still) { b.rest = false; b.sup = null; }
       // 只被其它板托住（没有螺丝支撑）超过 ppStuckMs → 只关闭它与板的碰撞（仍会被螺丝杆挡住）。紧密单层关卡里几乎每块下落板都会
       // 先压在下方邻板的上边缘，若全都永久托住，整盘空孔很快被盖满而无解；用户反馈的“被下方螺丝挡住”则永久托住。
-      if (b.rest && b.sup && !b.sup.s.length && !b.ppGhost) { b.ppT = (b.ppT || 0) + h; if (b.ppT * 1000 > (S.ppStuckMs ?? 1200)) { b.ppGhost = true; b.rest = false; b.sup = null; W.ppGhosts = (W.ppGhosts || 0) + 1; for (let f = body.getFixtureList(); f; f = f.getNext()) f.setFilterData({ groupIndex: 0, categoryBits: 2, maskBits: 4 }); body.setAwake(true); } }
-      else if (!(b.rest && b.sup && !b.sup.s.length)) b.ppT = 0;
+      // 与求解器落点预测一致：螺丝支撑只有在质心 x 落在支撑螺丝水平范围 ±6px 内时才算“稳定托住”（永久）；否则同“只被板托住”
+      const stable = b.rest && b.sup && b.sup.s.length && (() => { const xs = b.sup.s.map(id => { const sb = W.screws.get(id); return sb ? sb.getPosition().x * PX : NaN; }).filter(x => x === x); return xs.length && b.cx >= Math.min(...xs) - 6 && b.cx <= Math.max(...xs) + 6; })();
+      if (b.rest && b.sup) b.stable = !!stable;
+      if (b.rest && b.sup && !stable && !b.ppGhost) { b.ppT = (b.ppT || 0) + h; if (b.ppT * 1000 > (S.ppStuckMs ?? 1200)) { b.ppGhost = true; b.rest = false; b.sup = null; W.ppGhosts = (W.ppGhosts || 0) + 1; for (let f = body.getFixtureList(); f; f = f.getNext()) f.setFilterData({ groupIndex: 0, categoryBits: 2, maskBits: 4 }); body.setAwake(true); } }
+      else if (!(b.rest && b.sup && !stable)) b.ppT = 0;
       if (b.nudge && !b.ghost) b.ghostNow = true;
       if (!b.ghost && (b.ghostNow || ((S.collStuckMs ?? 0) > 0 && (b.tf - b.prog.t) * 1000 > S.collStuckMs))) {
         b.ghostNow = false; b.rest = false; b.sup = null; W.ghosts = (W.ghosts || 0) + 1;
