@@ -89,7 +89,7 @@
   - test:overlap 通过（540s，PP≤1.67 PS≤1.16）。下一步： test:collision、test:autoall（~13min）、其余套件逐个；不过则看 worstPS 的 t/screw 定位。旧条目：② 查 worstPS：random1/42x3 的 54px 是 pass 对（螺丝落进被动态板盖住的孔 → screwOverlaps 设穿过），heart 5.4px/reference 3.7px 是下落板 vs 螺丝（需 replay 加 PS 测量定位）；③ 释放瞬间 3.4px 预穿透（摆动极限环/静止贴住）是否需排除。
 - v1.7.2 发布（2026-10-18 20:40 UTC+8）：build OK；test:logic/rest/collision(16/16)/overlap(f148d1d) 通过；test:autoall 5/5（abort/nudge/ghost/mispredict 均 0，~713s）；npm test 通过（25/25 板移除，solve 100s）；test:ae 通过（PSNR 均值 36.1，最低 30.7）；test:3d Blender PASS（PSNR 26.9–29.5）；test:physics/norec/collcap 通过；test:holes 更新后通过（下落板被下方螺丝托住停在画面上，原“板离开后孔可放”改为：被托住时孔保持被挡）。未完成：test:cover（这次运行 rc=1 686s，期间 box 重启，未复查）、shape-test 未跑。
   - 已推送 b31aea3；Pages built b31aea3，cmp 一致；服务器 /screw/ cmp 一致（box 重启后需重装 sshpass）。
-- v1.7.3（进行中）图形关卡生成提速（目标每关 ≤20s，仍需物理预测可解）
+- v1.7.3（完成）图形关卡生成提速（目标每关 ≤20s，仍需物理预测可解）
   - 已提交 87b0052（levelFromImage 埋点 L.genLog/genMs、test/_genbench.mjs：playwright 调 __game.levelFromImage，打印每次尝试 [attempt, ms, ok, plates, emptyHoles, stats]）、7f805b1（buildOnce 去掉被上层板盖住的下层孔/螺丝，死锁修复；_diag/_diag2/_dumplv/_nodegen/_one 诊断脚本）。
   - 基准（7f805b1，_genbench）：heart 3.3s(1 次)、star_hole 9.2s(2 次)、cat 139s(16 次，空孔 4→11 才成功)。单次校验常超出 genSolveMs=4000（4.7–12.4s：只在 rec 入口查预算，单个 predictMove 很慢）。
   - test:cover 失败原因推测：fixture-cover 等图形关卡 waitForFunction 60s，cat 生成 >60s 超时。
@@ -101,3 +101,4 @@
   - 下一步：逐个跑 test:logic → test:rest → test:collision → test:cover → test:autoall → test:overlap（后台 + AwaitShell），然后 build/提交 'v1.7.3: 图形关卡生成提速'/push/Pages cmp/部署 cmp。
   - 测试（未提交最终版前）：test:logic/rest/collision(16/16) 通过；test:cover rc=0（cat 现在 12s 生成，以前 >60s → waitForFunction 超时即 rc=1 的原因；覆盖率 heart ≥98.2% star ≥99.1% cat ≥99.6%）。下一步 test:autoall → test:overlap → 发布。
   - test:autoall 5/5 通过（abort/nudge/ghost/mispredict 均 0）。下一步 test:overlap → 发布。
+  - test:overlap 通过（477s）：heart PP≤0.60 PS≤1.16 / heart-s2 0.66/1.09 / reference 1.70/1.04 / random1 0.06/0.70 / random42x3 1.56/0.72；badFrames 0、ghosts 0、abort/nudge/mispredict 0。
