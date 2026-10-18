@@ -78,7 +78,7 @@ const PARTS = new WeakMap(); // 板 → { inset: 凸块 }（求解器每次预�
 function partsOf(pl, ins) { let m = PARTS.get(pl); if (!m) PARTS.set(pl, m = {}); return m[ins] || (m[ins] = convexParts(ins > 0 ? offsetPoly(pl.poly, ins) : pl.poly)); }
 const key = (a, b) => a < b ? a + '|' + b : b + '|' + a;
 export function createWorld(L, bodies, S) {
-  const pw = new World({ gravity: Vec2(0, (S.gravity || 3600) / PX), allowSleep: false, continuousPhysics: false }); // 固定 1/120s 步长下板（≥30px）不会一步穿过螺丝杆，关闭 TOI 省时 // v1.7.2：不休眠——被托住的板在支撑移走后必须立即下落
+  const pw = new World({ gravity: Vec2(0, (S.gravity || 3600) / PX), allowSleep: false }); // 固定 1/120s 步长下板（≥30px）不会一步穿过螺丝杆，关闭 TOI 省时 // v1.7.2：不休眠——被托住的板在支撑移走后必须立即下落
   const W = { pw, L, S, bodies, ground: pw.createBody(), plates: [], screws: new Map(), pass: new Map(), steps: 0 };
   bodies.forEach((b, pi) => {
     if (b.s === 'gone') { W.plates.push({ body: null, joint: null }); return; } // 恢复快照：已离开的板不建刚体（否则实时/预测两边插入-删除的位置不同 → 宽相树结构不同 → 接触顺序不同 → 结果不逐位一致）
@@ -155,6 +155,7 @@ function makeJoint(W, pi, pinW, S) {
 // v1.7.2：固定步长（DT）确定性模拟。applyPins（钉数变化 → 状态转换）与 stepFixed（一步积分 + 读回 + 静止/托住检测）分开，
 // 实时游戏（累加器）与求解器预测（sim.js 无界面模拟）走完全相同的代码与步数 → 预测 == 实际。
 export const DT = 1 / 120;
+export const SUB = 3, VEL_IT = 10, POS_IT = 4;
 // 钉数变化会不会引起状态转换（求解器/实时都用它判定“这一步物理上什么都不会发生”）
 export function pinsChange(bodies, pins, pinW) {
   return bodies.some((b, pi) => {
@@ -187,7 +188,7 @@ export function applyPins(W, pins, pinW, S, obst) {
         b.s = 'fall'; b.posed = true; ev[pi] = 'fall'; b.tf = 0; b.prog = { cy: cm[1], t: 0 }; b.ghost = false; b.restT = 0; b.rest = false; b.sup = null; b.ppT = 0;
         if (q.joint) { W.pw.destroyJoint(q.joint); q.joint = null; }
         if (wasStatic) { body.setType('dynamic'); body.setLinearVelocity(Vec2(0, 0)); body.setAngularVelocity(0); }
-        body.setAngularDamping(S.angDamp ?? 1.5); body.setAwake(true);
+        body.setAngularDamping(S.angDamp ?? 1.5); body.setBullet(true); body.setAwake(true);
         body.setAngularVelocity(body.getAngularVelocity() + Math.max(-360, Math.min(360, (S.releaseSpinK || 0) * rx)) * D2R + (S.fallSpin || 0) * D2R);
         markOverlaps(W, pi);
       }
@@ -198,13 +199,17 @@ export function applyPins(W, pins, pinW, S, obst) {
 }
 // 一个固定步：返回事件数组（'gone'|null）
 export function stepFixed(W, S) {
-  const h = DT, g = S.gravity / PX, ev = W.bodies.map(() => null);
-  W.bodies.forEach((b, pi) => {
-    if (b.s !== 'swing') return; const body = W.plates[pi].body, c = body.getWorldCenter(), rx = c.x - b.pivW[0] / PX;
-    // 参考里的摆比真实物理摆更快：额外力矩 (boost−1)·m·g·rx（绕铰点等效角加速度 = boost · g · rx / (k2 + r²)）
-    body.applyTorque(((S.swingBoost || 1) - 1) * body.getMass() * g * rx, true);
-  });
-  W.pw.step(h, 6, 2); W.steps++;
+  const h = DT, g = S.gravity / PX, ev = W.bodies.map(() => null), hs = h / SUB;
+  // v1.7.2：一个 DT 内 SUB 个子步（1/360s）、10/4 迭代、开启 TOI（同 v1.7.1 的积分精度；子步数固定 → 仍确定）
+  for (let k = 0; k < SUB; k++) {
+    W.bodies.forEach((b, pi) => {
+      if (b.s !== 'swing') return; const body = W.plates[pi].body, c = body.getWorldCenter(), rx = c.x - b.pivW[0] / PX;
+      // 参考里的摆比真实物理摆更快：额外力矩 (boost−1)·m·g·rx（绕铰点等效角加速度 = boost · g · rx / (k2 + r²)）
+      body.applyTorque(((S.swingBoost || 1) - 1) * body.getMass() * g * rx, true);
+    });
+    W.pw.step(hs, VEL_IT, POS_IT);
+  }
+  W.steps++;
   W.bodies.forEach((b, pi) => {
     const q = W.plates[pi], body = q.body; if (!body || b.s === 'gone' || b.s === 'on') return;
     const p = body.getPosition(); b.cx = p.x * PX; b.cy = p.y * PX; b.ang = body.getAngle(); b.om = body.getAngularVelocity(); syncPose(b);
@@ -304,7 +309,7 @@ export function restoreWorld(L, bodies, S, snap, obst) {
       const lim = (S.swingMax ?? 17) * D2R;
       q.joint = W.pw.createJoint(new RevoluteJoint({ enableLimit: lim < Math.PI, lowerAngle: -lim, upperAngle: lim, referenceAngle: b.ang0 }, W.ground, body, Vec2(b.pivW[0] / PX, b.pivW[1] / PX)));
     } else {
-      body.setAngularDamping(S.angDamp ?? 1.5);
+      body.setAngularDamping(S.angDamp ?? 1.5); body.setBullet(true);
       if (b.ghost) ghostFilter(body); else if (b.ppGhost) ppGhostFilter(body);
     }
     body.setAwake(true);

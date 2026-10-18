@@ -80,3 +80,5 @@
   - 已知：随机关生成要做物理求解，3 层约 10–20s（每次失败 +1 空孔，genSolveMs 4000/次）。
   - 下一步：rest-on-screw 测试（main.js loadLevel 钩子 + test/rest-screw-test.mjs + screenshots/rest_on_screw.jpg）、AE/3D 检查、所有套件逐个、发布。
 - v1.7.2 发布尝试（2026-10-18 19:50 UTC+8，基于 15abfb4）：未发布。build OK；test:logic/rest/autoall 通过；test:overlap、test:collision 失败（板-板穿透 3.6–40px、板-螺丝 4–6.7px，非 ppGhost 引起；摆动板不再 settled，可能与 allowSleep:false/固定步长 DT 有关）。详见 ref/v172_test_log.txt。下一步：查 stepFixed/stepWorld 兼容包装下的碰撞（对比 4e10809 之前 collision-test 全过的提交，git bisect）。
+- v1.7.2 修复物理回归（2026-10-18 19:20 UTC+8）：根因 a8c1118 关闭 continuousPhysics/bullet 且 stepFixed 只做一次 1/120s、6/2 迭代 step（v1.7.1 是 1/360s 子步、10/4 迭代、TOI）。修复：stepFixed 内固定 SUB=3 个 1/360s 子步、VEL_IT 10/POS_IT 4、continuousPhysics 开、下落板 setBullet(true)（applyPins 与 restoreWorld 都设）。test:collision 16/16 通过（含摆动 settled）。
+  - 下一步：逐个跑 test:overlap → test:autoall（确定性/速度）→ 其余套件，记录到 ref/v172_test_log.txt；若太慢，考虑 SUB=2 或仅有下落板时子步。
