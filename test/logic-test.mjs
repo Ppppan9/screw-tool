@@ -79,10 +79,11 @@ import { migrate, SETTINGS_VERSION } from '../src/settings.js';
 import { THEMES, THEME_KEYS, themeDefaults } from '../src/themes.js';
 import { createSim, solvePhys, validateLevel } from '../src/sim.js';
 { const m = migrate({ version: 13, settings: { plateColor: '#123456', gravity: 3600 } });
-  ok(SETTINGS_VERSION === 14 && m.theme === 'palm' && m.plateColor === '#123456' && m.plateStyle === 'hatch' && m.screwStyle === 'brushed' && JSON.stringify(m.themeStore) === '{}', 'v13 存档迁移：主题 = 手掌款（默认），用户值保留，新材质键补默认');
+  ok(SETTINGS_VERSION >= 14 && m.theme === 'palm' && m.plateColor === '#123456' && m.plateStyle === 'hatch' && m.screwStyle === 'brushed' && JSON.stringify(m.themeStore) === '{}', 'v13 存档迁移：主题 = 手掌款（默认），用户值保留，新材质键补默认');
   const f = migrate(null); ok(f.theme === 'palm' && f.bgMode === 'image' && f.plateColor === DEFS.plateColor, '新存档：默认主题手掌款，外观 = 之前的默认值');
   const c = migrate({ version: 14, settings: { theme: 'classic', themeStore: { palm: { plateColor: '#ff0000' } }, plateColor: '#a8a3a4' } }); ok(c.theme === 'classic' && c.themeStore.palm.plateColor === '#ff0000', 'v14 存档：主题与分主题外观保留');
   ok(migrate({ version: 14, settings: { theme: 'xx' } }).theme === 'palm', '未知主题 → 手掌款');
+  { const a = migrate({ version: 14, settings: {} }), b2 = migrate({ version: 14, settings: { hideCursor: false } }); ok(SETTINGS_VERSION === 15 && a.hideCursor === true && b2.hideCursor === false, 'v15 hideCursor：旧存档补默认 true，用户值保留'); }
   const td = themeDefaults(DEFS, 'palm'); ok(THEME_KEYS.every(k => td[k] === DEFS[k]), '手掌款主题默认值 = 原默认值（数值完全不变）');
   ok(THEME_KEYS.every(k => k in DEFS), '主题键都在设置定义里'); }
 { const L = bigfootLevel(), st = initState(L);
