@@ -102,3 +102,4 @@
   - 测试（未提交最终版前）：test:logic/rest/collision(16/16) 通过；test:cover rc=0（cat 现在 12s 生成，以前 >60s → waitForFunction 超时即 rc=1 的原因；覆盖率 heart ≥98.2% star ≥99.1% cat ≥99.6%）。下一步 test:autoall → test:overlap → 发布。
   - test:autoall 5/5 通过（abort/nudge/ghost/mispredict 均 0）。下一步 test:overlap → 发布。
   - test:overlap 通过（477s）：heart PP≤0.60 PS≤1.16 / heart-s2 0.66/1.09 / reference 1.70/1.04 / random1 0.06/0.70 / random42x3 1.56/0.72；badFrames 0、ghosts 0、abort/nudge/mispredict 0。
+- v1.7.3 发布（2026-10-18 22:35 UTC+8，fec68a1）：build OK；test:logic/rest/collision(16/16)/cover/autoall(5/5)/shape-test/overlap(477s，PP≤1.70 PS≤1.16，ghosts/abort/nudge/mispredict 0) 通过。图形关卡生成：heart 3.4s / star_hole 7.0–7.3s / cat 11.5–12.0s（均 ≤20s）。Pages built fec68a1 cmp 一致；服务器 /screw/ cmp 一致。
