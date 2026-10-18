@@ -156,7 +156,7 @@ export function platePins(L, st, pi) {
 // v1.2.1（对齐参考 3.97s 点击→4.17s 板开始下落）：螺丝一旦拧出（离开孔）就不再固定任何板，
 // 先在“螺丝不在任何孔”的状态下结算掉落，再把螺丝放入目标孔
 export function settle(L, st) {
-  releaseRest(st);
+  releaseRest(L, st);
   const fell = []; let changed = true;
   if (!st.swing) st.swing = new Map();
   if (!st.npins) st.npins = L.plates.map(() => 0);
@@ -165,13 +165,13 @@ export function settle(L, st) {
     L.plates.forEach((p, pi) => {
       if (st.removed.has(pi)) return;
       const pins = platePins(L, st, pi);
-      if (pins.length === 0) { st.removed.add(pi); fell.push(pi); changed = true; return; }
+      if (pins.length === 0) { st.removed.add(pi); fell.push(pi); changed = true; if (st.pred) { const [P, H] = curPoly(L, st, pi), d = predictDrop(L, st, pi, P, H); if (d) { if (!st.rest) st.rest = new Map(); st.rest.set(pi, d); } } return; }
       // v1.5：由多钉减到 1 钉 → 绕剩下那颗摆动，其它孔不再对准底板孔
       if (pins.length === 1 && st.npins[pi] >= 2 && !st.swing.has(pi)) { st.swing.set(pi, swingPose(L, pi, st.screwHole[pins[0]])); changed = true; }
       st.npins[pi] = platePins(L, st, pi).length;
     });
   }
-  releaseRest(st);
+  releaseRest(L, st);
   return fell;
 }
 // v1.7：物理决定摆动板实际停下的角度（可能被其它板/螺丝挡在 < swingMax 处）。游戏里摆动板静止后把逻辑位姿同步为实际角度，再结算。
@@ -240,12 +240,53 @@ export function setRest(L, st, pi, xf, sup) {
   st.rest.set(pi, { pose: poseFromXf(L, pi, xf), scr: sup.s.filter(si => st.screwHole[si] >= 0).map(si => [si, st.screwHole[si]]), pl: sup.p.slice() });
 }
 export function clearRest(st, pi) { if (st.rest) st.rest.delete(pi); }
-// 支撑被移走（螺丝离开原孔 / 支撑板已离开）→ 不再托住
-function releaseRest(st) {
+// 支撑被移走（螺丝离开原孔 / 支撑板已离开）→ 不再托住。st.pred（求解器/生成器）：从当前位姿重新预测下落落点
+function releaseRest(L, st) {
   if (!st.rest || !st.rest.size) return;
   let ch = true;
-  while (ch) { ch = false; for (const [pi, r] of [...st.rest]) if (r.scr.some(([si, h]) => st.screwHole[si] !== h) || r.pl.some(pj => st.removed.has(pj) && !st.rest.has(pj))) { st.rest.delete(pi); ch = true; } }
+  while (ch) { ch = false; for (const [pi, r] of [...st.rest]) if (r.scr.some(([si, h]) => st.screwHole[si] !== h) || r.pl.some(pj => st.removed.has(pj) && !st.rest.has(pj)) || (st.pred && !r.scr.length)) {
+    st.rest.delete(pi); ch = true;
+    if (st.pred) { const d = predictDrop(L, st, pi, r.pose.poly, r.pose.holes); if (d) st.rest.set(pi, d); }
+  } }
 }
+// v1.7.2 落点预测（求解器/生成器用，解析近似）：板沿竖直方向平移下落，直到轮廓第一次碰到某颗插在底板里的螺丝杆圆（半径 SHAFT_R）。
+// 碰到 → 被这颗螺丝永久托住（pose = 平移后的轮廓，挡住中心在其内的孔）；碰不到 → 掉出。
+// 只被板托住的板在实际物理里 ppStuckMs 后穿过板继续下落，所以预测里忽略板-板支撑（与之一致）。
+// 实际物理可能绕接触点转动/滑落到更下面的螺丝：自动通关每步按物理同步的真实状态重新求解。
+export let SHAFT_R = 6; const STAB = 6;
+export function setShaftR(r) { SHAFT_R = r; }
+function densify(P, step = 3) { const out = []; for (let i = 0; i < P.length; i++) { const a = P[i], b = P[(i + 1) % P.length], n = Math.max(1, Math.ceil(Math.hypot(b[0] - a[0], b[1] - a[1]) / step)); for (let k = 0; k < n; k++) out.push([a[0] + (b[0] - a[0]) * k / n, a[1] + (b[1] - a[1]) * k / n]); } return out; }
+function predictDrop(L, st, pi, poly, ownPts) {
+  const R = SHAFT_R, D = densify(poly);
+  let x0 = 1e9, x1 = -1e9, y0 = 1e9; for (const [x, y] of poly) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; }
+  const own = ownPts || [];
+  const hits = [];
+  st.screwHole.forEach((h, si) => {
+    if (h < 0) return; const c = L.holes[h];
+    if (c.x < x0 - R || c.x > x1 + R || c.y + R < y0) return;
+    if (own.some(([x, y]) => Math.hypot(x - c.x, y - c.y) <= ALIGN_TOL)) return;
+    if (pointInPoly(c.x, c.y, poly)) return; // 已在轮廓内（不应发生）：忽略
+    let t = Infinity;
+    for (const [x, y] of D) { const dx = x - c.x; if (Math.abs(dx) > R) continue; const tt = c.y - Math.sqrt(R * R - dx * dx) - y; if (tt >= -1.5 && tt < t) t = tt; }
+    if (t < 1500) hits.push([t, si, c.x]);
+  });
+  // 稳定性：质心落在接触螺丝的水平范围内（±STAB px）才停住；否则绕接触点翻落——忽略这些螺丝继续往下找
+  hits.sort((a, b) => a[0] - b[0]);
+  let A = 0, cx = 0; for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) { const cr = poly[j][0] * poly[i][1] - poly[i][0] * poly[j][1]; A += cr; cx += (poly[j][0] + poly[i][0]) * cr; } cx /= (3 * A || 1);
+  let best = Infinity, sup = null;
+  for (let i = 0; i < hits.length;) {
+    const t1 = hits[i][0], grp = []; while (i < hits.length && hits[i][0] <= t1 + 3) grp.push(hits[i++]);
+    const lo = Math.min(...grp.map(g => g[2])), hi2 = Math.max(...grp.map(g => g[2]));
+    if (cx >= lo - STAB && cx <= hi2 + STAB) { best = t1; sup = grp.map(g => g[1]); break; }
+  }
+  if (!sup) return null;
+  const t = Math.max(0, best), P = poly.map(([x, y]) => [x, y + t]), H = own.map(([x, y]) => [x, y + t]);
+  const pose = { ang: 0, dx: 0, dy: t, C: [0, 0], poly: P, holes: H, al: new Set(), cov: new Set(), inn: new Set(), pred: true };
+  L.holes.forEach((h, k) => { if (H.some(([x, y]) => Math.hypot(x - h.x, y - h.y) <= ALIGN_TOL)) { pose.al.add(k); pose.cov.add(k); pose.inn.add(k); } else if (pointInPoly(h.x, h.y, P)) { pose.cov.add(k); pose.inn.add(k); } });
+  return { pose, scr: sup.map(si => [si, st.screwHole[si]]), pl: [] };
+}
+// 板 pi 刚被释放时的当前轮廓与自己孔的位置（摆动位姿或静止位姿）
+function curPoly(L, st, pi) { const sw = st.swing && st.swing.get(pi), p = L.plates[pi]; return sw ? [sw.poly, sw.holes] : [p.poly, p.holes.map(k => [L.holes[k].x, L.holes[k].y])]; }
 export function restSupporters(st) { const m = new Set(); if (st.rest) for (const r of st.rest.values()) r.scr.forEach(([si]) => m.add(si)); return m; }
 
 // 目标孔选择规则
@@ -264,12 +305,15 @@ export function pickHole(L, st, si, rule, lastVacated, rnd = Math.random) {
 }
 
 // 自动求解：贪心 + 回溯。返回 [[screw, hole], ...] 或 null
-export function solve(L, st0, maxNodes = 20000) {
+export function solve(L, st0, maxNodes = 20000, pred = true) {
   let nodes = 0;
-  const clone = (s) => ({ removed: new Set(s.removed), screwHole: s.screwHole.slice(), swing: new Map(s.swing), rest: new Map(s.rest || []), npins: s.npins ? s.npins.slice() : null });
+  const clone = (s) => ({ removed: new Set(s.removed), screwHole: s.screwHole.slice(), swing: new Map(s.swing), rest: new Map(s.rest || []), pred, npins: s.npins ? s.npins.slice() : null });
+  const seen = new Set(), maxDepth = L.screws.length * 6 + 20;
   function rec(st, path) {
     if (done(L, st)) return path;
-    if (++nodes > maxNodes) return null;
+    if (++nodes > maxNodes || path.length > maxDepth) return null;
+    const sk = st.screwHole.join(',') + '|' + [...st.removed].sort((a, b) => a - b).join(',') + '|' + (st.rest ? [...st.rest].map(([k, r]) => k + ':' + Math.round(r.pose.dy || 0)).sort().join(',') : '');
+    if (seen.has(sk)) return null; seen.add(sk);
     const holes = usableHoles(L, st).filter(h => !L.plates.some((p, pi) => !st.removed.has(pi) && p.holes.includes(h)));
     if (!holes.length) return null;
     // 候选螺丝：在未掉落板上且可取，按所在板剩余螺丝数、层级排序
@@ -286,7 +330,10 @@ export function solve(L, st0, maxNodes = 20000) {
     for (const { si } of cands.slice(0, 4)) {
       const from = L.holes[st.screwHole[si]];
       const covN = h => coverInfo(L)[h].filter(pi => !st.removed.has(pi)).length;
-      const hs = holes.slice().sort((a, b) => (covN(a) - covN(b)) || Math.hypot(L.holes[a].x - from.x, L.holes[a].y - from.y) - Math.hypot(L.holes[b].x - from.x, L.holes[b].y - from.y));
+      // v1.7.2：支撑螺丝不要放到被托住板的正下方（否则板又落在它上面）
+      const col = [...(st.rest || new Map()).values()].filter(r => r.scr.some(([q]) => q === si)).map(r => { let a = 1e9, b = -1e9; for (const [x] of r.pose.poly) { a = Math.min(a, x); b = Math.max(b, x); } return [a - 8, b + 8]; });
+      const under = h => col.some(([a, b]) => L.holes[h].x > a && L.holes[h].x < b) ? 1 : 0;
+      const hs = holes.slice().sort((a, b) => (under(a) - under(b)) || (covN(a) - covN(b)) || Math.hypot(L.holes[a].x - from.x, L.holes[a].y - from.y) - Math.hypot(L.holes[b].x - from.x, L.holes[b].y - from.y));
       const s2 = clone(st); applyMove(L, s2, si, hs[0]);
       const r = rec(s2, path.concat([[si, hs[0]]]));
       if (r) return r;
@@ -300,7 +347,9 @@ export function solve(L, st0, maxNodes = 20000) {
 export function mulberry(seed) { return () => { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
 export function generateLevel(o, seed) {
   for (let tries = 0; tries < 60; tries++) {
-    const L = buildRandom(o, mulberry(seed + tries * 7919)); if (!L) continue;
+    // v1.7.2：落点预测下可能无解 → 每 6 次失败多加 1 个空孔（同图形关卡）
+    const L = buildRandom({ ...o, emptyHoles: (o.emptyHoles || 2) + Math.floor(tries / 6) }, mulberry(seed + tries * 7919)); if (!L) continue;
+    L.attempts = tries + 1;
     const st = initState(L);
     if (solve(L, st, 6000)) return L;
   }

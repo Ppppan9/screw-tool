@@ -1,7 +1,7 @@
 import { levelFromImage, defaultShapeCanvas } from './shapegen.js';
 import { newBody, toWorld as bodyToWorld } from './physics.js';
 import { createWorld, stepWorld, swingMoving, fallUnsettled } from './world.js';
-import { referenceLevel, generateLevel, initState, holeUsable, screwFree, applyMove, pickHole, solve, done, setBlocking, platePins, coverInfo, liftOut, cancelLift, setPhysicsRules, setSwingAngle, poseFromXf, setPlatePose, poseDiff, setRest, clearRest, pointInPoly, ALIGN_TOL, EDGE_TOL } from './level.js';
+import { referenceLevel, generateLevel, initState, holeUsable, screwFree, applyMove, pickHole, solve, done, setBlocking, platePins, coverInfo, liftOut, cancelLift, setPhysicsRules, setSwingAngle, poseFromXf, setPlatePose, poseDiff, setRest, clearRest, setShaftR, pointInPoly, ALIGN_TOL, EDGE_TOL } from './level.js';
 import { toLocal as bodyToLocal } from './physics.js';
 import { GROUPS, DEFS, loadSettings, saveSettings, migrate, exportJSON } from './settings.js';
 import { drawBackground, drawBase, plateSprite, drawHole, drawScrew } from './render.js';
@@ -41,7 +41,7 @@ function imageLevel() {
   return shapeCache.img ? levelFromImage(shapeCache.img, S, S.shapeSeed) : levelFromImage(defaultShapeCanvas(), S, S.shapeSeed);
 }
 function newGame() {
-  setBlocking(S.screwBlock); setPhysicsRules({ swingMax: S.swingMax, releaseAt: S.releaseAt });
+  setBlocking(S.screwBlock); setPhysicsRules({ swingMax: S.swingMax, releaseAt: S.releaseAt }); setShaftR(S.collShaftR ?? 6);
   autoToken++; autoRunning = false; updAutoBtn();
   L = S.level === 'random' ? generateLevel(S, S.seed) : S.level === 'image' ? imageLevel() : referenceLevel();
   st = initState(L); active = null; lastVacated = -1; finishedAt = 0; endShownAt = 0;
