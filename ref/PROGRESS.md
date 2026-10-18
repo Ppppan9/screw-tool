@@ -103,3 +103,8 @@
   - test:autoall 5/5 通过（abort/nudge/ghost/mispredict 均 0）。下一步 test:overlap → 发布。
   - test:overlap 通过（477s）：heart PP≤0.60 PS≤1.16 / heart-s2 0.66/1.09 / reference 1.70/1.04 / random1 0.06/0.70 / random42x3 1.56/0.72；badFrames 0、ghosts 0、abort/nudge/mispredict 0。
 - v1.7.3 发布（2026-10-18 22:35 UTC+8，fec68a1）：build OK；test:logic/rest/collision(16/16)/cover/autoall(5/5)/shape-test/overlap(477s，PP≤1.70 PS≤1.16，ghosts/abort/nudge/mispredict 0) 通过。图形关卡生成：heart 3.4s / star_hole 7.0–7.3s / cat 11.5–12.0s（均 ≤20s）。Pages built fec68a1 cmp 一致；服务器 /screw/ cmp 一致。
+- v1.8（进行中）主题下拉 + 经典款大脚掌（用户：“把最经典的大脚掌加上，老规矩，主题下拉选择经典款”，同麻将工具 国风/中东风 主题模式）
+  - 已做：src/themes.js（palm=手掌款（默认，数值不变）/ classic=经典款；THEME_KEYS 分主题保存 themeStore；themeDefaults）；settings v14（「主题」分组：theme 界面主题、↺ 恢复主题外观；新增材质键 plateStyle/plateAltColor/screwStyle/holeStyle/baseStyle/bgMode=silk/silkColor/silkOpacity/linen；迁移只补默认）；main.js setTheme/resetTheme/refreshTheme（参考关卡随主题换关，随机/图形关卡只换材质）、恢复默认保留当前主题；render.js 经典款：metalSprite（拉丝金属/米色沙粒第二板材）、镜面银粗十字螺丝、黑色深孔、木纹底板、丝绸线条+亚麻布纹背景（程序化）。
+  - 关卡：tools/trace_bigfoot.py（ref/bigfoot/ref_720.png = 广告截图游戏区 9:16 放大；深色描边连通区分割 + 共享区分水岭；板外扩 3px 且板间留 ≥3.5px）+ tools/bigfoot_groups.json（螺丝分组，21 板 25 螺丝；前掌左为双钉板）→ src/bigfoot_trace.json；level.js bigfootLevel()（脚跟板 openHoles = 黑色空孔，sim.js legalMoves 允许往 openHoles 放螺丝；FOOT_HIDDEN 米色板下 1 个隐藏孔，无它 120s 无解）。solvePhys 36 步 ~6–7s。
+  - test:logic 通过（新增主题迁移 + 大脚掌可解 9 项）。test:autoall 新增第 6 例 reference{theme:classic}。
+  - 下一步：autoall 经典款、npm test、test:ae、test:3d、test:norec、test:collision（逐个）；screenshots/bigfoot_ref_vs_tool.jpg；README；发布。

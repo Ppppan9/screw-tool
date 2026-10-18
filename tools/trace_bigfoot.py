@@ -21,24 +21,33 @@ cs, _ = cv2.findContours(foot, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE); c = ma
 base = cv2.approxPolyDP(c, 1.5, True)[:, 0, :].tolist()
 G = json.load(open('tools/bigfoot_groups.json'))
 groups, empty = G['plates'], G['empty']
-markers = np.zeros((H, W), np.int32)
-markers[cv2.erode(255 - foot, np.ones((5, 5), np.uint8)) > 0] = 1
-sep = (V < 95) | ((S > 60) & (V < 170))  # 描边 + 缝里露出的棕色底板
-im2 = im.copy()
-for i, pl in enumerate(groups):
-    pts = pl['screws'] + pl.get('holes', [])
-    for p in pts: cv2.circle(markers, (int(p[0]), int(p[1])), 12, i + 2, -1); cv2.circle(im2, (int(p[0]), int(p[1])), 27, (190, 190, 190), -1)
-    for a, bb in zip(pts, pts[1:]): cv2.line(markers, tuple(map(int, a)), tuple(map(int, bb)), i + 2, 8)
-for p in G.get('seeds_sep', []): cv2.circle(markers, (int(p[0]), int(p[1])), 4, 1, -1)
-ws = cv2.watershed(cv2.GaussianBlur(im2, (3, 3), 0), markers)
-plates = []
-# 分水岭把缝（深色描边 + 棕色底板）都分给了背景标签 → 板偏小、缝偏宽（参考缝 ≈ 描边 2.5 + 棕 4 + 描边 2.5）。
-# 每块板向外长 GROW px，但离任何其它板至少保留 KEEP px（不重叠，物理与原手掌关卡一样留 1~4px 缝）
-GROW, KEEP = 7, 5.5
+# v2：板 = 深色描边网络围出的连通区（螺丝圆盘先抹成板色；闭运算 5x5 封住描边小断口）；
+# 两块板落进同一连通区（描边断开）时在该区内用螺丝做种子分水岭切开
+dark = (V < 90).astype(np.uint8)
+dark = cv2.morphologyEx(dark, cv2.MORPH_CLOSE, np.ones((5, 5), np.uint8))
+for pl in groups:
+    for p in pl['screws'] + pl.get('holes', []): cv2.circle(dark, (int(p[0]), int(p[1])), 29, 0, -1)
+inner = ((dark == 0) & (foot > 0)).astype(np.uint8)
+ncc, lab = cv2.connectedComponents(inner, connectivity=4)
+ids = [lab[int(pl['screws'][0][1]), int(pl['screws'][0][0])] for pl in groups]
 masks = []
 for i, pl in enumerate(groups):
-    m = (ws == i + 2).astype(np.uint8) * 255
-    masks.append(cv2.morphologyEx(m, cv2.MORPH_OPEN, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (9, 9))))
+    comp = lab == ids[i]
+    share = [j for j in range(len(groups)) if ids[j] == ids[i]]
+    if len(share) > 1:
+        # 分水岭在“暗度”图上（螺丝圆盘抹平）：先淹没亮的板面，边界落在残缺的深色描边上；区外不放标记
+        dk = 255 - V.astype(np.uint8); dk = dk.copy()
+        for pl2 in groups:
+            for p in pl2['screws']: cv2.circle(dk, (int(p[0]), int(p[1])), 29, 0, -1)
+        mk = np.zeros((H, W), np.int32)
+        for j in share:
+            for p in groups[j]['screws']: cv2.circle(mk, (int(p[0]), int(p[1])), 12, j + 2, -1)
+        ws = cv2.watershed(cv2.cvtColor(cv2.GaussianBlur(dk, (3, 3), 0), cv2.COLOR_GRAY2BGR), mk); comp = comp & (ws == i + 2)
+    m = comp.astype(np.uint8) * 255
+    masks.append(cv2.morphologyEx(m, cv2.MORPH_OPEN, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (7, 7))))
+plates = []
+# 连通区边界在描边内侧 → 每块板向外长 GROW px（盖住半条描边），但离其它板至少 KEEP px（不重叠，物理与手掌关卡一样留缝）
+GROW, KEEP = 3, 3.5
 D = np.stack([cv2.distanceTransform(255 - m, cv2.DIST_L2, 5) for m in masks])
 for i, pl in enumerate(groups):
     others = np.delete(D, i, axis=0).min(0)

@@ -69,7 +69,7 @@ function startLevel(Lnew) {
   L = Lnew;
   st = initState(L); active = null; lastVacated = -1; finishedAt = 0; endShownAt = 0;
   plateVis = null; vHole = st.screwHole.slice(); pend = [];
-  screwVis = L.screws.map((s, i) => ({ ang: S.screwStyle === 'chrome' ? ((i * 0.37) % 0.36) - 0.18 : (i * 1.7) % (Math.PI / 2) - 0.3, // 经典款参考里十字基本正放（±10°）
+  screwVis = L.screws.map((s, i) => ({ ang: S.screwStyle === 'chrome' ? 0.12 + ((i * 0.37) % 0.4) : (i * 1.7) % (Math.PI / 2) - 0.3, // 经典款参考里十字多为顺时针 7°~30° 斜放
     lift: 0, sc: 1, x: 0, y: 0, anim: null }));
   rebuild();
   // v1.4.2：与麻将工具一致——打开页面/重新开始/自动通关都不再自动开始 AE 记录。

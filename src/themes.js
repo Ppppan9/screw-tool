@@ -7,12 +7,12 @@ export const THEMES = {
     id: 'classic', name: '经典款', level: 'bigfoot',
     // 取样：ref/bigfoot/ref_720.png（tools/trace_bigfoot.py 的板块多边形分区取样，见 ANALYSIS.md「经典款」）
     defaults: {
-      bgMode: 'silk', bgColor: '#dcd9cb', bgNoise: 0.05, silkColor: '#a99671', silkOpacity: 0.55, linen: 0.5,
+      bgMode: 'silk', bgColor: '#dcd9cb', bgNoise: 0.05, silkColor: '#a08d68', silkOpacity: 0.85, linen: 0.5,
       baseStyle: 'wood', baseColor: '#6f6151', baseGrain: 0.25, baseOutline: '#0c0909', baseGloss: 0, edgeHalo: 0.12,
       plateStyle: 'metal', plateColor: '#a8a3a4', plateAltColor: '#c8b896', plateShade: '#4b4646', plateThick: 1.5, plateGrain: 0.55,
       plateOutline: '#0d0a0a', plateGloss: 0.95, outlineW: 2.4, plateRadius: 1, plateShadow: 0.22,
-      screwStyle: 'chrome', screwSize: 50, screwColor: '#c9c7c8', screwDark: '#5b5859', screwBrush: 0.8, screwRim: '#0e0b0b', screwRimW: 2.6,
-      screwCross: '#2f2c2d', crossLen: 0.5, crossW: 0.2,
+      screwStyle: 'chrome', screwSize: 50, screwColor: '#b9b6b7', screwDark: '#5b5859', screwBrush: 0.8, screwRim: '#0e0b0b', screwRimW: 2.6,
+      screwCross: '#2f2c2d', crossLen: 0.54, crossW: 0.27,
       holeStyle: 'black', holeSize: 38, plateHoleSize: 44, plateHoleWall: 3, holeColor: '#1d1b1e',
     },
   },

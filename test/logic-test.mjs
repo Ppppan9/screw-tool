@@ -73,4 +73,23 @@ setPhysicsRules({ releaseAt: 'seat', swingMax: 17 });
 { const L = referenceLevel(), st = initState(L), plan = solve(L, st); let s2 = initState(L), good = !!plan, sw = 0;
   if (plan) for (const [si, hi] of plan) { if (!holeUsable(L, s2, hi)) { good = false; break; } applyMove(L, s2, si, hi); sw = Math.max(sw, s2.swing.size); }
   ok(good && done(L, s2), `v1.5 参考关卡可解（${plan ? plan.length : '-'} 步，过程中最多 ${sw} 块板摆动）`); }
+// ---- v1.8 主题 + 经典款大脚掌 ----
+import { bigfootLevel } from '../src/level.js';
+import { migrate, SETTINGS_VERSION } from '../src/settings.js';
+import { THEMES, THEME_KEYS, themeDefaults } from '../src/themes.js';
+import { createSim, solvePhys, validateLevel } from '../src/sim.js';
+{ const m = migrate({ version: 13, settings: { plateColor: '#123456', gravity: 3600 } });
+  ok(SETTINGS_VERSION === 14 && m.theme === 'palm' && m.plateColor === '#123456' && m.plateStyle === 'hatch' && m.screwStyle === 'brushed' && JSON.stringify(m.themeStore) === '{}', 'v13 存档迁移：主题 = 手掌款（默认），用户值保留，新材质键补默认');
+  const f = migrate(null); ok(f.theme === 'palm' && f.bgMode === 'image' && f.plateColor === DEFS.plateColor, '新存档：默认主题手掌款，外观 = 之前的默认值');
+  const c = migrate({ version: 14, settings: { theme: 'classic', themeStore: { palm: { plateColor: '#ff0000' } }, plateColor: '#a8a3a4' } }); ok(c.theme === 'classic' && c.themeStore.palm.plateColor === '#ff0000', 'v14 存档：主题与分主题外观保留');
+  ok(migrate({ version: 14, settings: { theme: 'xx' } }).theme === 'palm', '未知主题 → 手掌款');
+  const td = themeDefaults(DEFS, 'palm'); ok(THEME_KEYS.every(k => td[k] === DEFS[k]), '手掌款主题默认值 = 原默认值（数值完全不变）');
+  ok(THEME_KEYS.every(k => k in DEFS), '主题键都在设置定义里'); }
+{ const L = bigfootLevel(), st = initState(L);
+  ok(L.plates.length === 21 && L.screws.length === 25 && L.holes.length === 27, `大脚掌关卡：${L.plates.length} 板 / ${L.screws.length} 螺丝 / ${L.holes.length} 孔（含脚跟板空孔 + 1 隐藏孔）`);
+  const free = L.holes.map((_, i) => i).filter(h => holeUsable(L, st, h) && st.screwHole.indexOf(h) < 0); ok(free.length === 1 && L.plates.some(p => p.openHoles && p.openHoles.includes(free[0])), '初始唯一可用空孔 = 脚跟板上的黑孔');
+  ok(L.plates.filter(p => p.mat === 'alt').length === 1, '脚跟米色板使用第二板材');
+  const S = { ...DEFS }, sim = createSim(L, S), stats = {}, plan = solvePhys(L, S, sim.snap, { sim, timeMs: 30000, stats });
+  ok(!!plan, `大脚掌 solvePhys 可解（${plan ? plan.length : '-'} 步，${stats.nodes} 节点，${stats.ms}ms）`);
+  ok(validateLevel(bigfootLevel(), S, 30000), '大脚掌 validateLevel 通过'); }
 process.exit(fails ? 1 : 0);

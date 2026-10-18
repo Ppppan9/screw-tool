@@ -1,7 +1,7 @@
 // v1.7：参考/随机/图形关卡全程自动通关，检查没有板卡在画面上（npm run test:autoall）
 import { chromium } from 'playwright-core';
 const b = await chromium.launch({ executablePath: '/usr/bin/google-chrome', headless: true });
-const cases = [['reference', {}], ['random', { seed: 1 }], ['random', { seed: 7 }], ['random', { seed: 42, genLayers: 3 }], ['image', {}]];
+const cases = [['reference', {}], ['random', { seed: 1 }], ['random', { seed: 7 }], ['random', { seed: 42, genLayers: 3 }], ['image', {}], ['reference', { theme: 'classic' }]]; // v1.8：经典款大脚掌
 let fails = 0; const only = process.env.CASES ? process.env.CASES.split(',').map(Number) : null;
 for (const [ci, [level, extra]] of cases.entries()) {
   if (only && !only.includes(ci)) continue;
@@ -9,7 +9,7 @@ for (const [ci, [level, extra]] of cases.entries()) {
   p.on('console', m => { if (/MISPREDICT|Error/.test(m.text())) console.log('  [page]', m.text().slice(0, 600)); });
   await p.goto('file://' + process.cwd() + '/index.html'); await p.waitForTimeout(300);
   const r = await p.evaluate(([level, extra]) => new Promise(res => {
-    const G = __game; for (const k in extra) G.S[k] = extra[k]; G.set('level', level); G.newGame();
+    const G = __game; if (extra.theme) G.setTheme(extra.theme); for (const k in extra) if (k !== 'theme') G.S[k] = extra[k]; G.set('level', level); G.newGame();
     const t0 = performance.now(); let maxFall = 0, swingSync = 0; const angs = new Map();
     window.__DBGP = 1; G.autoSolve();
     const tick = () => {

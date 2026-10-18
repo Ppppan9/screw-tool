@@ -75,9 +75,9 @@ function drawSilk(ctx, S, W, H, k) {
     const C = crPath(pts, 24), M = C.length;
     const nr = C.map((p, i) => { const a = C[Math.max(0, i - 1)], b = C[Math.min(M - 1, i + 1)], dx = b[0] - a[0], dy = b[1] - a[1], l = Math.hypot(dx, dy) || 1; return [-dy / l, dx / l]; });
     for (let i = 0; i < N; i++) {
-      const u = (rnd() - 0.5) * 2, o0 = Math.sign(u) * Math.pow(Math.abs(u), 1.2) * wid / 2, a1 = (rnd() - 0.5) * wid * 0.12, f1 = 1 + rnd() * 2, p1 = rnd() * 6.28, a2 = (rnd() - 0.5) * 5, f2 = 3 + rnd() * 4;
+      const u = (rnd() - 0.5) * 2, o0 = u * wid / 2, a1 = (rnd() - 0.5) * wid * 0.22, f1 = 0.8 + rnd() * 1.6, p1 = rnd() * 6.28, a2 = (rnd() - 0.5) * 5, f2 = 3 + rnd() * 4;
       const f = 0.5 + rnd() * 0.7, col = base.map(v => Math.max(0, Math.min(255, Math.round(f <= 1 ? v * f : v + (255 - v) * (f - 1) * 1.5))));
-      ctx.strokeStyle = `rgba(${col},${S.silkOpacity * (0.3 + rnd() * 0.7) * (1 - Math.abs(u) * 0.5)})`; ctx.lineWidth = 0.35 + rnd() * 0.5;
+      ctx.strokeStyle = `rgba(${col},${S.silkOpacity * (0.3 + rnd() * 0.7) * (1 - Math.abs(u) * 0.75) * 0.7})`; ctx.lineWidth = 0.45 + rnd() * 0.5;
       ctx.beginPath();
       for (let j = 0; j < M; j++) { const t = j / (M - 1), off = o0 + a1 * Math.sin(t * f1 * Math.PI + p1) + a2 * Math.sin(t * f2 * Math.PI + p1 * 2); const x = C[j][0] + nr[j][0] * off, y = C[j][1] + nr[j][1] * off; j ? ctx.lineTo(x, y) : ctx.moveTo(x, y); }
       ctx.stroke();
@@ -275,7 +275,7 @@ export function drawScrew(ctx, x, y, S, ang, lift, sc, part = 'all') {
     ctx.fillStyle = g; ctx.fill();
     if (S.screwBrush > 0 && ctx.createConicGradient) {
       const cg = ctx.createConicGradient(-0.5, x, y), b = S.screwBrush;
-      [[0, `rgba(255,255,255,${0.95 * b})`], [0.12, `rgba(255,255,255,${0.6 * b})`], [0.25, `rgba(70,66,67,${0.75 * b})`], [0.38, `rgba(150,146,147,${0.3 * b})`], [0.5, `rgba(255,255,255,${0.95 * b})`], [0.62, `rgba(255,255,255,${0.6 * b})`], [0.75, `rgba(70,66,67,${0.75 * b})`], [0.88, `rgba(150,146,147,${0.3 * b})`], [1, `rgba(255,255,255,${0.95 * b})`]].forEach(([o, c]) => cg.addColorStop(o, c));
+      [[0, `rgba(255,255,255,${0.95 * b})`], [0.12, `rgba(255,255,255,${0.6 * b})`], [0.25, `rgba(55,51,52,${0.9 * b})`], [0.38, `rgba(150,146,147,${0.3 * b})`], [0.5, `rgba(255,255,255,${0.95 * b})`], [0.62, `rgba(255,255,255,${0.6 * b})`], [0.75, `rgba(55,51,52,${0.9 * b})`], [0.88, `rgba(150,146,147,${0.3 * b})`], [1, `rgba(255,255,255,${0.95 * b})`]].forEach(([o, c]) => cg.addColorStop(o, c));
       ctx.save(); ctx.fillStyle = cg; ctx.beginPath(); ctx.arc(x, y, R * 0.94, 0, 7); ctx.fill(); ctx.restore();
     }
     ctx.lineWidth = 1.1; ctx.strokeStyle = 'rgba(255,255,255,0.85)'; ctx.beginPath(); ctx.arc(x, y, R - S.screwRimW - 0.9, 0, 7); ctx.stroke();
@@ -300,9 +300,10 @@ export function drawScrew(ctx, x, y, S, ang, lift, sc, part = 'all') {
   const L = R * S.crossLen, T = R * S.crossW / 2;
   if (chrome) {
     // 经典款：粗直十字（圆头），右下侧亮边（槽壁受光）
-    ctx.lineCap = 'round';
-    ctx.strokeStyle = 'rgba(255,255,255,0.7)'; ctx.lineWidth = T * 2; ctx.beginPath(); ctx.moveTo(-L + 0.9, 1.1); ctx.lineTo(L + 0.9, 1.1); ctx.moveTo(0.9, -L + 1.1); ctx.lineTo(0.9, L + 1.1); ctx.stroke();
-    ctx.strokeStyle = S.screwCross; ctx.lineWidth = T * 2; ctx.beginPath(); ctx.moveTo(-L, 0); ctx.lineTo(L, 0); ctx.moveTo(0, -L); ctx.lineTo(0, L); ctx.stroke();
+    // 参考：槽中间宽、两端收窄的圆头十字，槽内上暗下灰（凹槽）；右下侧细亮边
+    const arm = (dx) => { for (const a of [0, Math.PI / 2]) { ctx.save(); ctx.rotate(a); ctx.beginPath(); ctx.moveTo(-L + dx, -T * 0.75 + dx); ctx.quadraticCurveTo(dx, -T * 1.3 + dx, L + dx, -T * 0.75 + dx); ctx.arc(L + dx, dx, T * 0.75, -Math.PI / 2, Math.PI / 2); ctx.quadraticCurveTo(dx, T * 1.3 + dx, -L + dx, T * 0.75 + dx); ctx.arc(-L + dx, dx, T * 0.75, Math.PI / 2, Math.PI * 1.5); ctx.fill(); ctx.restore(); } };
+    ctx.fillStyle = 'rgba(255,255,255,0.75)'; arm(1);
+    const cg2 = ctx.createLinearGradient(0, -L, 0, L); cg2.addColorStop(0, shade(S.screwCross, -0.2)); cg2.addColorStop(1, shade(S.screwCross, 0.25)); ctx.fillStyle = cg2; arm(0);
     ctx.restore(); return;
   }
   for (const a of [0, Math.PI / 2]) {
