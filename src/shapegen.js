@@ -58,9 +58,9 @@ function partitioner(S, rnd, inside, area, layer) {
 }
 // 主函数：img 为已加载的 Image/Canvas
 // v1.7.3 提速：① 每次失败 +S.genEmptyStep(默认 1) 个空孔（以前每 2 次 +1）；② 先用解析求解器（静态模型，毫秒级）过滤，失败直接换下一个候选；
-// ③ 物理预测校验每次预算 S.imgSolveMs(默认 2500ms，solvePhys 现在逐步检查预算，不再超时数倍)。只接受物理预测可解的关卡。
+// ③ 物理预测校验每次预算 S.imgSolveMs(默认 3500ms，solvePhys 现在逐步检查预算，不再超时数倍)。只接受物理预测可解的关卡。
 export function levelFromImage(img, S, seed0) {
-  const log = []; const T0 = performance.now(), step = S.genEmptyStep ?? 1, ms = S.imgSolveMs ?? 2500;
+  const log = []; const T0 = performance.now(), step = S.genEmptyStep ?? 1, ms = S.imgSolveMs ?? 3500;
   for (let attempt = 0; attempt < 24; attempt++) {
     const L = buildOnce(img, S, seed0 + attempt * 977, Math.floor(attempt * step));
     if (!L) break;

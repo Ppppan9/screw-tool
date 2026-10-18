@@ -37,13 +37,29 @@ function worldToDesign(x, y) { const v = view(); return { x: x * v.b + v.tx, y: 
 const shapeCache = { src: null, img: null };
 function imageLevel() {
   if (!S.shapeImg) return levelFromImage(defaultShapeCanvas(), S, S.shapeSeed);
-  if (shapeCache.src !== S.shapeImg) { shapeCache.src = S.shapeImg; shapeCache.img = null; const im = new Image(); im.onload = () => { if (shapeCache.src === im.src || shapeCache.src === S.shapeImg) { shapeCache.img = im; newGame(); } }; im.src = S.shapeImg; }
-  return shapeCache.img ? levelFromImage(shapeCache.img, S, S.shapeSeed) : levelFromImage(defaultShapeCanvas(), S, S.shapeSeed);
+  if (shapeCache.src !== S.shapeImg) { shapeCache.src = S.shapeImg; shapeCache.img = null; const im = new Image(); im.onload = () => { if (shapeCache.src === im.src || shapeCache.src === S.shapeImg) { shapeCache.img = im; newGameUI(); } }; im.src = S.shapeImg; }
+  // v1.7.3：图片还在加载 → 不先生成默认图形关卡（以前要多花一整轮生成时间），保留当前关卡，加载完成后 newGame
+  if (!shapeCache.img) return L ? null : referenceLevel();
+  return levelFromImage(shapeCache.img, S, S.shapeSeed);
 }
+let genToken = 0;
 function newGame() {
+  genToken++;
   setBlocking(S.screwBlock); setPhysicsRules({ swingMax: S.swingMax, releaseAt: S.releaseAt }); setShaftR(S.collShaftR ?? 6);
   autoToken++; autoRunning = false; updAutoBtn();
-  startLevel(S.level === 'random' ? generateLevel(S, S.seed) : S.level === 'image' ? imageLevel() : referenceLevel());
+  const t0 = performance.now();
+  const Lnew = S.level === 'random' ? generateLevel(S, S.seed) : S.level === 'image' ? imageLevel() : referenceLevel();
+  if (!Lnew) return;
+  startLevel(Lnew);
+  const ms = performance.now() - t0; if (genBusy) { genBusy = false; toastHide(); } if (ms > 1500 && S.level !== 'reference') toast(`关卡已生成（${(ms / 1000).toFixed(1)}s${Lnew.attempts ? '，尝试 ' + Lnew.attempts + ' 次' : ''}）`);
+}
+// v1.7.3：界面触发的重新生成（随机/图形关卡要做物理求解校验，可能要几秒）：先显示进度提示，等它画出来再同步生成；期间又调用 newGame() 则作废
+let genBusy = false;
+function newGameUI() {
+  if (S.level === 'reference' || (S.level === 'image' && S.shapeImg && !shapeCache.img)) return newGame(); // 图片未加载：只发起加载（onload 再走这里）
+  const tok = ++genToken; genBusy = true;
+  toast(S.level === 'image' ? '正在生成图形关卡（求解校验中，约 5–20 秒）…' : '正在生成随机关卡（求解校验中）…', 0);
+  requestAnimationFrame(() => setTimeout(() => { if (tok === genToken) newGame(); }, 30));
 }
 // v1.7.2：测试钩子 __game.loadLevel(L) 也走这里（自定义关卡）
 function startLevel(Lnew) {
@@ -410,7 +426,7 @@ const REBUILD_KEYS = /^(canvas|bg|leaf|base|plate|outline|board)/, NEWGAME_KEYS 
 function applyChange(k) {
   if (k === 'shapeImg' && S.shapeImg) S.level = 'image';
   saveSettings(S); setPhysicsRules({ swingMax: S.swingMax, releaseAt: S.releaseAt });
-  if (NEWGAME_KEYS.test(k)) newGame(); else if (REBUILD_KEYS.test(k)) rebuild();
+  if (NEWGAME_KEYS.test(k)) newGameUI(); else if (REBUILD_KEYS.test(k)) rebuild();
   if (k === 'handImage') loadHand();
   if (k === 'bgm' || k === 'bgmVol') { if (k === 'bgm') sfx.setBgm(S.bgm, S.bgmVol); else if (sfx.bgmGain) sfx.bgmGain.gain.value = S.bgmVol; }
 }
@@ -444,11 +460,13 @@ function buildPanel() {
     body.append(det);
   });
 }
-function toast(t) { const el = document.getElementById('toast'); el.textContent = t; el.classList.add('show'); setTimeout(() => el.classList.remove('show'), 1600); }
+let toastT = 0;
+function toast(t, dur = 1600) { const el = document.getElementById('toast'); el.textContent = t; el.classList.add('show'); clearTimeout(toastT); if (dur > 0) toastT = setTimeout(() => el.classList.remove('show'), dur); }
+function toastHide() { clearTimeout(toastT); document.getElementById('toast').classList.remove('show'); }
 document.getElementById('btnAuto').onclick = autoSolve;
 document.getElementById('btnNew').onclick = newGame;
-document.getElementById('btnShape').onclick = () => { S.shapeSeed = 1 + Math.floor(Math.random() * 9999); S.level = 'image'; saveSettings(S); buildPanel(); newGame(); };
-document.getElementById('btnSeed').onclick = () => { S.seed = 1 + Math.floor(Math.random() * 9999); if (S.level !== 'random') S.level = 'random'; saveSettings(S); buildPanel(); newGame(); };
+document.getElementById('btnShape').onclick = () => { S.shapeSeed = 1 + Math.floor(Math.random() * 9999); S.level = 'image'; saveSettings(S); buildPanel(); newGameUI(); };
+document.getElementById('btnSeed').onclick = () => { S.seed = 1 + Math.floor(Math.random() * 9999); if (S.level !== 'random') S.level = 'random'; saveSettings(S); buildPanel(); newGameUI(); };
 document.getElementById('btnRec').onclick = () => rec ? stopRec() : startRec();
 document.getElementById('btnShot').onclick = () => { const a = document.createElement('a'); a.href = cv.toDataURL('image/png'); a.download = 'screw_shot.png'; a.click(); };
 document.getElementById('btnExport').onclick = () => { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([exportJSON(S)], { type: 'application/json' })); a.download = 'screw-tool-settings.json'; a.click(); };
