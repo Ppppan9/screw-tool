@@ -136,7 +136,7 @@ export function solvePhys(L, S, snap0, opts = {}) {
   const sim = opts.sim || createSim(L, S); let nodes = 0;
   const cache = L._simCache || (L._simCache = new Map()); if (cache.size > 4000) cache.clear();
   const seen = new Set();
-  const out = (snap, si, h) => { const k = exactKey(snap) + '#' + si + '>' + h; if (cache.has(k)) return cache.get(k); const r = predictMove(sim, snap, si, h); cache.set(k, r); return r; };
+  const out = (snap, si, h) => { const k = exactKey(snap) + '#' + si + '>' + h; if (cache.has(k)) return cache.get(k); const t = opts.onPredict ? Date.now() : 0; const r = predictMove(sim, snap, si, h); if (opts.onPredict) opts.onPredict(Date.now() - t, !!r, sim.ticks); cache.set(k, r); return r; };
   const score = s => s.bodies.reduce((a, r) => a + (r.s === 'gone' ? 3 : r.s === 'fall' ? -1 : r.s === 'swing' ? 0.2 : 0), 0);
   function rec(snap, depth) {
     if (allGone(snap)) return [];
@@ -154,6 +154,7 @@ export function solvePhys(L, S, snap0, opts = {}) {
     moves.sort((a, b) => a.ord - b.ord);
     const base = score(snap), kids = [];
     for (const m of moves) {
+      if (Date.now() - T0 > budget) return null; // v1.7.3：逐步检查预算（单步预测可能很慢）
       const r = out(snap, m.si, m.h); if (!r) continue;
       const k = { ...m, r, sc: score(r) - base };
       if (k.sc >= 2.9) { k.done = true; const p = rec(k.r, depth + 1); if (p) return [[k.si, k.h, k.r]].concat(p); }

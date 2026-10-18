@@ -93,3 +93,6 @@
   - 已提交 87b0052（levelFromImage 埋点 L.genLog/genMs、test/_genbench.mjs：playwright 调 __game.levelFromImage，打印每次尝试 [attempt, ms, ok, plates, emptyHoles, stats]）、7f805b1（buildOnce 去掉被上层板盖住的下层孔/螺丝，死锁修复；_diag/_diag2/_dumplv/_nodegen/_one 诊断脚本）。
   - 基准（7f805b1，_genbench）：heart 3.3s(1 次)、star_hole 9.2s(2 次)、cat 139s(16 次，空孔 4→11 才成功)。单次校验常超出 genSolveMs=4000（4.7–12.4s：只在 rec 入口查预算，单个 predictMove 很慢）。
   - test:cover 失败原因推测：fixture-cover 等图形关卡 waitForFunction 60s，cat 生成 >60s 超时。
+  - 已做（WIP 提交）：world.js overlapArea 改逐行扫描线 + 超过阈值提前返回（与逐点 inPoly 计数逐位相同，/tmp 对拍 1574 对 0 差异；cat 剖析里它占 27%）；sim.js solvePhys 每个预测前检查预算；shapegen.levelFromImage：解析求解器预过滤、每次失败 +genEmptyStep(1) 空孔、imgSolveMs(2500) 预算、S.onGenProgress 回调。test/_prof.mjs（esbuild 打包后 node：predictMove 耗时分布，需 /tmp/lv_*.json 由 test/_dumplv.mjs 生成）。
+  - 结果 1（imgSolveMs 2500, step 1）：heart 7.6s(3 次，比之前 3.3s 慢：原来 3.2s 成功的被 2.5s 预算截断)、star_hole 6.4s、cat 26s(13 次，13 板/16 空孔)。cat 物理每 tick ~75ms（531 个凸块 + TOI），节点数少是瓶颈。
+  - 下一步：试 imgSolveMs 3500；main.js 进度 toast（btnShape/设置改动走延迟生成 + token，newGame() 保持同步供测试）；图片未加载时不再先生成默认图形关卡（双倍耗时）。

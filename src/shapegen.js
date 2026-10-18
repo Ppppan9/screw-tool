@@ -1,6 +1,6 @@
 // v1.3 导入透明图形生成关卡：alpha 剪影 → 平滑底板轮廓（支持内孔/多块）→ 按参考风格切分板块（细缝）→ 螺丝/空孔/隐藏孔 → 求解器验证可解
 import { smoothPoly, polyArea } from './geom.js';
-import { mulberry, validate, initState, pointInPoly, referenceLevel } from './level.js';
+import { mulberry, validate, initState, pointInPoly, referenceLevel, solve } from './level.js';
 
 // ---- 等值线（marching squares，线性插值，闭合环）----
 export function marching(F, nx, ny) {
@@ -57,15 +57,22 @@ function partitioner(S, rnd, inside, area, layer) {
   return (x, y) => { const u = x * ca + y * sa, v = -x * sa + y * ca + off, k = Math.floor(v / w), vm = (v - (k + 0.5) * w); const cs = cuts(k); let s = 0; while (s < cs.length - 1 && cs[s + 1][0] + cs[s + 1][1] * vm < u) s++; return k * 10000 + s; };
 }
 // 主函数：img 为已加载的 Image/Canvas
+// v1.7.3 提速：① 每次失败 +S.genEmptyStep(默认 1) 个空孔（以前每 2 次 +1）；② 先用解析求解器（静态模型，毫秒级）过滤，失败直接换下一个候选；
+// ③ 物理预测校验每次预算 S.imgSolveMs(默认 2500ms，solvePhys 现在逐步检查预算，不再超时数倍)。只接受物理预测可解的关卡。
 export function levelFromImage(img, S, seed0) {
-  const log = []; const T0 = performance.now();
+  const log = []; const T0 = performance.now(), step = S.genEmptyStep ?? 1, ms = S.imgSolveMs ?? 2500;
   for (let attempt = 0; attempt < 24; attempt++) {
-    const L = buildOnce(img, S, seed0 + attempt * 977, Math.floor(attempt / 2));
+    const L = buildOnce(img, S, seed0 + attempt * 977, Math.floor(attempt * step));
     if (!L) break;
-    const t = performance.now(); const ok = L.plates.length && validate(L, S, S.genSolveMs ?? 4000, 12000); log.push([attempt, Math.round(performance.now() - t), !!ok, L.plates.length, L.holes.length - L.screws.length, JSON.stringify(globalThis.__genStats && globalThis.__genStats.last)]); if (globalThis.__genLog) globalThis.__genLog(log[log.length - 1]);
+    if (!L.plates.length) continue;
+    const t = performance.now(); const an = S.genAnalytic === false || !!solve(L, initState(L), 3000);
+    const ta = Math.round(performance.now() - t);
+    const ok = an && validate(L, S, ms, 12000);
+    const e = [attempt, Math.round(performance.now() - t), !!ok, L.plates.length, L.holes.length - L.screws.length, an ? JSON.stringify(globalThis.__genStats && globalThis.__genStats.last) : 'analytic-fail ' + ta + 'ms'];
+    log.push(e); if (globalThis.__genLog) globalThis.__genLog(e); if (S.onGenProgress) S.onGenProgress(attempt + 1, Math.round(performance.now() - T0));
     if (ok) { L.seed = seed0 + attempt * 977; L.attempts = attempt + 1; L.genLog = log; L.genMs = Math.round(performance.now() - T0); return L; }
   }
-  const R = referenceLevel(); R.name = 'reference(fallback)'; R.genLog = log; return R;
+  const R = referenceLevel(); R.name = 'reference(fallback)'; R.genLog = log; R.genMs = Math.round(performance.now() - T0); return R;
 }
 export function buildOnce(img, S, seed, extraEmpty) {
   const rnd = mulberry(seed);

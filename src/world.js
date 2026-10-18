@@ -109,11 +109,21 @@ export function createWorld(L, bodies, S) {
 //  板-螺丝：只有该板自己孔里的螺丝（含摆动的支点钉、穿过它对齐孔的螺丝）穿过；其它插在底板里的螺丝都会挡住板材料。
 function worldPoly(W, pi) { const b = W.bodies[pi]; return W.L.plates[pi].poly.map(([x, y]) => toWorld(b, x, y)); }
 function bbox(P) { let a = 1e9, b = 1e9, c = -1e9, d = -1e9; for (const [x, y] of P) { if (x < a) a = x; if (y < b) b = y; if (x > c) c = x; if (y > d) d = y; } return [a, b, c, d]; }
-export function overlapArea(A, B, step = 2) {
+// v1.7.3：逐行扫描线（与 inPoly 同一交点公式 → 计数与逐点 inPoly 完全相同），超过 lim 提前返回
+function rowXs(P, y, out) { out.length = 0; for (let i = 0, j = P.length - 1; i < P.length; j = i++) { const xi = P[i][0], yi = P[i][1], xj = P[j][0], yj = P[j][1]; if ((yi > y) !== (yj > y)) out.push((xj - xi) * (y - yi) / (yj - yi) + xi); } out.sort((a, b) => a - b); return out; }
+export function overlapArea(A, B, step = 2, lim = Infinity) {
   const a = bbox(A), b = bbox(B), x0 = Math.max(a[0], b[0]), y0 = Math.max(a[1], b[1]), x1 = Math.min(a[2], b[2]), y1 = Math.min(a[3], b[3]);
   if (x0 >= x1 || y0 >= y1) return 0;
-  let n = 0; for (let y = y0 + step / 2; y < y1; y += step) for (let x = x0 + step / 2; x < x1; x += step) if (inPoly(x, y, A) && inPoly(x, y, B)) n++;
-  return n * step * step;
+  const XA = [], XB = [], s2 = step * step; let n = 0;
+  for (let y = y0 + step / 2; y < y1; y += step) {
+    rowXs(A, y, XA); if (!XA.length) continue; rowXs(B, y, XB); if (!XB.length) continue;
+    let ia = 0, ib = 0; // ia/ib = 交点中 <= x 的个数；inPoly ⇔ (#{xs > x}) 为奇数
+    for (let x = x0 + step / 2; x < x1; x += step) {
+      while (ia < XA.length && !(x < XA[ia])) ia++; while (ib < XB.length && !(x < XB[ib])) ib++;
+      if (((XA.length - ia) & 1) && ((XB.length - ib) & 1)) { n++; if (n * s2 > lim) return n * s2; }
+    }
+  }
+  return n * s2;
 }
 function ownHole(W, pi, x, y) { const b = W.bodies[pi]; return (b.holes || []).some(([hx, hy]) => { const w = toWorld(b, hx, hy); return Math.hypot(w[0] - x, w[1] - y) < (W.S.ownHoleTol ?? 9); }); }
 function markOverlaps(W, pi) {
@@ -121,7 +131,7 @@ function markOverlaps(W, pi) {
   W.plates.forEach((q, pj) => {
     if (pj === pi || !q.body || W.bodies[pj].s === 'gone') return;
     if ((W.L.plates[pj].layer || 0) === lay) return;
-    if (overlapArea(P, worldPoly(W, pj)) > thr) W.pass.set(key('p' + pi, 'p' + pj), W.steps);
+    if (overlapArea(P, worldPoly(W, pj), 2, thr) > thr) W.pass.set(key('p' + pi, 'p' + pj), W.steps);
   });
   void me;
   W.screws.forEach((sb, id) => { const p = sb.getPosition(); if (ownHole(W, pi, p.x * PX, p.y * PX)) W.pass.set(key('p' + pi, 's' + id), W.steps); });
