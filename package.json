@@ -16,7 +16,8 @@
     "test:collcap": "node test/collision-capture.mjs",
     "test:autoall": "node test/autosolve-all.mjs",
     "test:overlap": "node test/overlap-test.mjs",
-    "test:cover": "node test/fixture-cover.mjs"
+    "test:cover": "node test/fixture-cover.mjs",
+    "test:rest": "node test/rest-screw-test.mjs"
   },
   "repository": {
     "type": "git",
