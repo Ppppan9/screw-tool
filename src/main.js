@@ -293,13 +293,13 @@ async function autoSolve() {
   try {
     await wait(S.autoStartDelay, tok);
     // v1.7：物理决定画面（摆动板可能停在更小角度、下落板可能被托住一会儿）→ 每步前确认计划仍合法，否则从当前状态重新求解
-    let plan2 = plan.slice(), tries = 0;
+    let plan2 = plan.slice(), tries = 0; window.__autoStats = { replan: 0, abort: 0, dev: 0 };
     const legal = ([si, hi]) => st.screwHole[si] >= 0 && screwFree(L, st, si) && holeUsable(L, st, hi);
     const waitUntil = async (f, ms) => { const tw = now(); while (!f() && now() - tw < ms) { if (tok !== autoToken) throw 'stop'; await new Promise(r => requestAnimationFrame(r)); } };
     while (!done(L, st)) {
       await waitIdle(tok); await waitUntil(() => !physBusy(), 1500);
       if (!plan2.length || !legal(plan2[0])) {
-        plan2 = solve(L, st) || [];
+        plan2 = solve(L, st) || []; window.__autoStats.replan++;
         if (!plan2.length) { if (++tries > 20) { status('当前局面无解，请重新开始'); break; } await wait(250, tok); continue; }
       }
       tries = 0;
@@ -309,7 +309,10 @@ async function autoSolve() {
       if (S.moveRule === 'tap2') {
         await tapWorld(h0.x, h0.y, tok); await waitIdle(tok); await wait(S.autoSelectGap, tok);
         await waitUntil(() => holeTargetable(hi), 4000);
+        // 目标孔仍被画面上的板挡住：不要点（会落到旁边别的孔、偏离计划），把螺丝放回、重新规划
+        if (!holeTargetable(hi) || active !== si) { if (active !== null) await tapWorld(h0.x, h0.y, tok); window.__autoStats.abort++; plan2 = []; continue; }
         await tapWorld(h1.x, h1.y, tok);
+        if (st.screwHole[si] !== hi) window.__autoStats.dev++;
       } else {
         const save = S.moveRule; S.moveRule = 'tap2';
         await tapWorld(h0.x, h0.y, tok); await waitIdle(tok); await tapWorld(h1.x, h1.y, tok); S.moveRule = save;
@@ -446,6 +449,6 @@ document.getElementById('btnExport').onclick = () => { const a = document.create
 document.getElementById('btnImport').onclick = () => document.getElementById('importFile').click();
 document.getElementById('importFile').onchange = (e) => { const f = e.target.files[0]; if (!f) return; f.text().then(t => { S = migrate(JSON.parse(t)); saveSettings(S); buildPanel(); loadHand(); sfx.setBgm(S.bgm, S.bgmVol); newGame(); toast('已导入设置'); }).catch(() => toast('导入失败')); };
 document.getElementById('btnReset').onclick = () => { if (!confirm('恢复全部默认设置？')) return; S = { ...DEFS }; saveSettings(S); buildPanel(); loadHand(); newGame(); };
-window.__game = { holeWorld: (hi) => holeWorld(hi), holeTargetable: (hi) => holeTargetable(hi), visBlocked: (hi) => visBlocked(hi), view: () => view(), tapXY: (x, y) => { const v = view(); return tapAt(x * v.b + v.tx, y * v.b + v.ty); }, tapHole: (hi) => { const w = holeWorld(hi), v = view(); return tapAt(w[0] * v.b + v.tx, w[1] * v.b + v.ty); }, get vHole() { return vHole; }, doExportAE, doExport3D, aeRec, aeStart: () => recStart(), aeStop: () => aeStop(), aeActive: () => aeActive(), get aeLastRec() { return aeLastRec; }, get mediaRec() { return rec; }, autoSolve, newGame, get S() { return S; }, set(k, v) { S[k] = v; applyChange(k); buildPanel(); }, get st() { return st; }, get L() { return L; }, get plateVis() { return plateVis; }, get world() { return world; }, get screwVis() { return screwVis; }, startRec, stopRec };
+window.__game = { holeWorld: (hi) => holeWorld(hi), holeTargetable: (hi) => holeTargetable(hi), visBlocked: (hi) => visBlocked(hi), view: () => view(), tapXY: (x, y) => { const v = view(); return tapAt(x * v.b + v.tx, y * v.b + v.ty); }, tapHole: (hi) => { const w = holeWorld(hi), v = view(); return tapAt(w[0] * v.b + v.tx, w[1] * v.b + v.ty); }, get vHole() { return vHole; }, doExportAE, doExport3D, aeRec, aeStart: () => recStart(), aeStop: () => aeStop(), aeActive: () => aeActive(), get aeLastRec() { return aeLastRec; }, get mediaRec() { return rec; }, autoSolve, newGame, get S() { return S; }, set(k, v) { S[k] = v; applyChange(k); buildPanel(); }, get st() { return st; }, get L() { return L; }, get plateVis() { return plateVis; }, get world() { return world; }, solveNow: () => solve(L, st), physBusy: () => physBusy(), get screwVis() { return screwVis; }, startRec, stopRec };
 buildPanel(); loadHand(); newGame(); if (S.bgm) sfx.setBgm(S.bgm, S.bgmVol);
 requestAnimationFrame(loop);

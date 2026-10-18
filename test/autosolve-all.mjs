@@ -15,7 +15,7 @@ for (const [level, extra] of cases) {
       maxFall = Math.max(maxFall, pv.filter(b => b.s === 'fall').length);
       G.st.swing.forEach((sw, pi) => { if (Math.abs(sw.ang) < 16.9 * Math.PI / 180 && !angs.has(pi)) { angs.set(pi, +(sw.ang * 57.2958).toFixed(1)); swingSync++; } });
       const fin = window.__finished && pv.every(b => b.s === 'gone');
-      if (fin || t > 150000) return res({ fin: !!fin, ms: Math.round(t), plates: pv.length, removed: G.st.removed.size, onScreen: pv.filter(b => b.s !== 'gone').map(b => b.s), maxFallTogether: maxFall, ppHits: pv.reduce((s, b) => s + b.pHits, 0), psHits: pv.reduce((s, b) => s + b.hits, 0), platesHitPlate: pv.filter(b => b.pHits > 0).length, platesHitScrew: pv.filter(b => b.hits > 0).length, ghosts: pv.filter(b => b.ghost).length, swingSyncedAngles: [...angs.values()] });
+      if (fin || t > 150000) return res({ fin: !!fin, ms: Math.round(t), plates: pv.length, removed: G.st.removed.size, onScreen: pv.filter(b => b.s !== 'gone').map(b => b.s), maxFallTogether: maxFall, ppHits: pv.reduce((s, b) => s + b.pHits, 0), psHits: pv.reduce((s, b) => s + b.hits, 0), platesHitPlate: pv.filter(b => b.pHits > 0).length, platesHitScrew: pv.filter(b => b.hits > 0).length, ghosts: pv.filter(b => b.ghost).length, swingSyncedAngles: [...angs.values()], auto: window.__autoStats });
       requestAnimationFrame(tick);
     };
     requestAnimationFrame(tick);
