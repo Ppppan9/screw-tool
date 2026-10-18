@@ -74,15 +74,17 @@ export function convexParts(poly) {
 }
 
 // ---------- 世界 ----------
+const PARTS = new WeakMap(); // 板 → { inset: 凸块 }（求解器每次预测都重建世界，凸分解只做一次）
+function partsOf(pl, ins) { let m = PARTS.get(pl); if (!m) PARTS.set(pl, m = {}); return m[ins] || (m[ins] = convexParts(ins > 0 ? offsetPoly(pl.poly, ins) : pl.poly)); }
 const key = (a, b) => a < b ? a + '|' + b : b + '|' + a;
 export function createWorld(L, bodies, S) {
   const pw = new World({ gravity: Vec2(0, (S.gravity || 3600) / PX), allowSleep: false }); // v1.7.2：不休眠——被托住的板在支撑移走后必须立即下落
   const W = { pw, L, S, bodies, ground: pw.createBody(), plates: [], screws: new Map(), pass: new Map(), steps: 0 };
   bodies.forEach((b, pi) => {
-    const ins = S.ppInset ?? 1.5, parts = convexParts(ins > 0 ? offsetPoly(L.plates[pi].poly, ins) : L.plates[pi].poly), m = b.m, c0 = toWorld(b, m.cx, m.cy);
+    const ins = S.ppInset ?? 1.5, parts = partsOf(L.plates[pi], ins), m = b.m, c0 = toWorld(b, m.cx, m.cy);
     const body = pw.createBody({ type: 'static', position: Vec2(c0[0] / PX, c0[1] / PX), angle: b.ang });
     let fa = 0; for (const c of parts) { try { body.createFixture(new Polygon(c.map(([x, y]) => Vec2((x - m.cx) / PX, (y - m.cy) / PX))), { density: 1, friction: S.ppFric ?? 0.4, restitution: S.ppRest ?? 0.1 }); fa += Math.abs(polyArea(c)); } catch (e) { } }
-    b.fixCover = fa / Math.max(1, Math.abs(polyArea(L.plates[pi].poly))); b.fixCoverIns = fa / Math.max(1, Math.abs(polyArea(ins > 0 ? offsetPoly(L.plates[pi].poly, ins) : L.plates[pi].poly)));
+    if (b.fixCover == null) { b.fixCover = fa / Math.max(1, Math.abs(polyArea(L.plates[pi].poly))); b.fixCoverIns = fa / Math.max(1, Math.abs(polyArea(ins > 0 ? offsetPoly(L.plates[pi].poly, ins) : L.plates[pi].poly))); }
     body.setUserData({ k: 'p', id: 'p' + pi, pi });
     W.plates.push({ body, joint: null });
   });
@@ -128,7 +130,7 @@ function screwOverlaps(W, id, sb) {
   const p = sb.getPosition();
   W.plates.forEach((q, pi) => { const b = W.bodies[pi]; if (!q.body || (b.s !== 'swing' && b.s !== 'fall')) return; const [lx, ly] = toLocal(b, p.x * PX, p.y * PX); if (ownHole(W, pi, p.x * PX, p.y * PX) || inPoly(lx, ly, W.L.plates[pi].poly)) W.pass.set(key('p' + pi, 's' + id), W.steps); });
 }
-function syncScrews(W, obst, S) {
+function syncScrews(W, obst, S, restoring) {
   const seen = new Set(), r = (S.collShaftR ?? 6) / PX;
   for (const o of obst) {
     seen.add(o.id); let sb = W.screws.get(o.id);
@@ -136,7 +138,7 @@ function syncScrews(W, obst, S) {
     if (!sb) {
       sb = W.pw.createBody({ type: 'static', position: Vec2(o.x / PX, o.y / PX) });
       sb.createFixture(new Circle(r), { friction: S.collFric ?? 0.3, restitution: S.collRest ?? 0.2, filterCategoryBits: 4 }); sb.setUserData({ k: 's', id: 's' + o.id, sid: o.id }); sb._r = r;
-      W.screws.set(o.id, sb); screwOverlaps(W, o.id, sb);
+      W.screws.set(o.id, sb); if (!restoring) screwOverlaps(W, o.id, sb);
     } else if (Math.abs(sb._r - r) > 1e-6) { sb.destroyFixture(sb.getFixtureList()); sb.createFixture(new Circle(r), { friction: S.collFric ?? 0.3, filterCategoryBits: 4 }); sb._r = r; }
   }
   for (const [id, sb] of [...W.screws]) if (!seen.has(id)) { W.pw.destroyBody(sb); W.screws.delete(id); for (const k of [...W.pass.keys()]) if (k.split('|').includes('s' + id)) W.pass.delete(k); }
@@ -148,8 +150,20 @@ function makeJoint(W, pi, pinW, S) {
   q.joint = W.pw.createJoint(new RevoluteJoint({ enableLimit: lim < Math.PI, lowerAngle: -lim, upperAngle: lim }, W.ground, q.body, Vec2(pinW[0] / PX, pinW[1] / PX)));
   b.piv = toLocal(b, pinW[0], pinW[1]); b.ang0 = b.ang; b.pivW = pinW.slice();
 }
-// 每帧：pins[pi] = 视觉上固定该板的钉数，pinW[pi] = 唯一那颗的世界坐标；obst = 插在底板里的螺丝 {id,x,y}。返回事件数组（'swing'|'fall'|'gone'|null）
-export function stepWorld(W, pins, pinW, dt, S, obst) {
+// v1.7.2：固定步长（DT）确定性模拟。applyPins（钉数变化 → 状态转换）与 stepFixed（一步积分 + 读回 + 静止/托住检测）分开，
+// 实时游戏（累加器）与求解器预测（sim.js 无界面模拟）走完全相同的代码与步数 → 预测 == 实际。
+export const DT = 1 / 120;
+// 钉数变化会不会引起状态转换（求解器/实时都用它判定“这一步物理上什么都不会发生”）
+export function pinsChange(bodies, pins, pinW) {
+  return bodies.some((b, pi) => {
+    const n = pins[pi]; if (b.s !== 'on' && b.s !== 'swing') return false;
+    if (n === 0) return true;
+    if (b.s === 'on') return n === 1 && b.n >= 2;
+    if (n >= 2) return true;
+    return !b.pivW || Math.hypot(b.pivW[0] - pinW[pi][0], b.pivW[1] - pinW[pi][1]) > 3;
+  });
+}
+export function applyPins(W, pins, pinW, S, obst) {
   W.S = S; W.pw.setGravity(Vec2(0, S.gravity / PX));
   syncScrews(W, obst, S);
   const ev = W.bodies.map(() => null);
@@ -164,31 +178,31 @@ export function stepWorld(W, pins, pinW, dt, S, obst) {
           body.setAngularDamping(S.swingDamp || 0); makeJoint(W, pi, pinW[pi], S);
           const cm = toWorld(b, b.m.cx, b.m.cy); body.setAngularVelocity(Math.sign(cm[0] - pinW[pi][0]) * (S.swingKick || 0) * D2R);
           b.settleT = 0; b.settled = false; markOverlaps(W, pi);
-        } else if (b.s === 'swing' && (!b.pivW || Math.hypot(b.pivW[0] - pinW[pi][0], b.pivW[1] - pinW[pi][1]) > 3)) makeJoint(W, pi, pinW[pi], S);
+        } else if (b.s === 'swing' && (!b.pivW || Math.hypot(b.pivW[0] - pinW[pi][0], b.pivW[1] - pinW[pi][1]) > 3)) { makeJoint(W, pi, pinW[pi], S); b.settleT = 0; b.settled = false; }
         b.lastPiv = pinW[pi].slice();
       } else {
         const cm = toWorld(b, b.m.cx, b.m.cy), rx = b.lastPiv ? cm[0] - b.lastPiv[0] : 0, wasStatic = b.s === 'on';
-        b.s = 'fall'; b.posed = true; ev[pi] = 'fall'; b.tf = 0; b.prog = { cy: cm[1], t: 0 }; b.ghost = false;
+        b.s = 'fall'; b.posed = true; ev[pi] = 'fall'; b.tf = 0; b.prog = { cy: cm[1], t: 0 }; b.ghost = false; b.restT = 0; b.rest = false; b.sup = null; b.ppT = 0;
         if (q.joint) { W.pw.destroyJoint(q.joint); q.joint = null; }
         if (wasStatic) { body.setType('dynamic'); body.setLinearVelocity(Vec2(0, 0)); body.setAngularVelocity(0); }
-        body.setAngularDamping(S.angDamp ?? 1.5); body.setBullet(true); body.setAwake(true);
+        body.setAngularDamping(S.angDamp ?? 1.5); body.setAwake(true);
         body.setAngularVelocity(body.getAngularVelocity() + Math.max(-360, Math.min(360, (S.releaseSpinK || 0) * rx)) * D2R + (S.fallSpin || 0) * D2R);
         markOverlaps(W, pi);
       }
       b.n = n;
     }
   });
-  // 固定子步（1/360 s）积分
-  const h = Math.min(dt, 0.05), ns = Math.max(1, Math.ceil(h * 360)), hs = h / ns, g = S.gravity / PX;
-  for (let k = 0; k < ns; k++) {
-    W.bodies.forEach((b, pi) => {
-      if (b.s !== 'swing') return; const body = W.plates[pi].body, c = body.getWorldCenter(), rx = c.x - b.pivW[0] / PX;
-      // 参考里的摆比真实物理摆更快：额外力矩 (boost−1)·m·g·rx（绕铰点等效角加速度 = boost · g · rx / (k2 + r²)）
-      body.applyTorque(((S.swingBoost || 1) - 1) * body.getMass() * g * rx, true);
-    });
-    W.pw.step(hs, 10, 4); W.steps++;
-  }
-  // 读回位姿；摆动静止检测；下落卡住检测；出屏
+  return ev;
+}
+// 一个固定步：返回事件数组（'gone'|null）
+export function stepFixed(W, S) {
+  const h = DT, g = S.gravity / PX, ev = W.bodies.map(() => null);
+  W.bodies.forEach((b, pi) => {
+    if (b.s !== 'swing') return; const body = W.plates[pi].body, c = body.getWorldCenter(), rx = c.x - b.pivW[0] / PX;
+    // 参考里的摆比真实物理摆更快：额外力矩 (boost−1)·m·g·rx（绕铰点等效角加速度 = boost · g · rx / (k2 + r²)）
+    body.applyTorque(((S.swingBoost || 1) - 1) * body.getMass() * g * rx, true);
+  });
+  W.pw.step(h, 8, 3); W.steps++;
   W.bodies.forEach((b, pi) => {
     const q = W.plates[pi], body = q.body; if (!body || b.s === 'gone' || b.s === 'on') return;
     const p = body.getPosition(); b.cx = p.x * PX; b.cy = p.y * PX; b.ang = body.getAngle(); b.om = body.getAngularVelocity(); syncPose(b);
@@ -199,36 +213,36 @@ export function stepWorld(W, pins, pinW, dt, S, obst) {
         const a = b.ang0 + Math.sign(ra) * lim, c = Math.cos(a), s2 = Math.sin(a), ux = b.piv[0] - b.C[0], uy = b.piv[1] - b.C[1];
         b.ang = a; b.dx = b.pivW[0] - b.C[0] - (c * ux - s2 * uy); b.dy = b.pivW[1] - b.C[1] - (s2 * ux + c * uy);
         const cm = toWorld(b, b.m.cx, b.m.cy); b.cx = cm[0]; b.cy = cm[1]; body.setTransform(Vec2(b.cx / PX, b.cy / PX), a);
-        if (b.om * ra > 0) { b.om = -b.om * (S.swingBounce || 0); body.setAngularVelocity(b.om); const v = body.getLinearVelocity(); body.setLinearVelocity(Vec2(-b.om * (b.cy - b.pivW[1]) / PX, b.om * (b.cx - b.pivW[0]) / PX)); void v; }
+        if (b.om * ra > 0) { b.om = -b.om * (S.swingBounce || 0); body.setAngularVelocity(b.om); body.setLinearVelocity(Vec2(-b.om * (b.cy - b.pivW[1]) / PX, b.om * (b.cx - b.pivW[0]) / PX)); }
       }
       b.relAng = b.ang - b.ang0;
-      if (Math.abs(b.om) < 0.15) { b.settleT += h; if (b.settleT > 0.08) b.settled = true; } else { b.settleT = 0; b.settled = false; }
+      if (Math.abs(b.om) < 0.15) { b.settleT = (b.settleT || 0) + h; if (b.settleT > 0.08) b.settled = true; } else { b.settleT = 0; b.settled = false; }
     } else if (b.s === 'fall') {
       b.tf += h;
       if (b.cy > b.prog.cy + 20) b.prog = { cy: b.cy, t: b.tf };
-      // v1.7.2：被托住（几乎不动）→ rest；记录支撑者（正在接触的螺丝/板）。默认不再穿过（collStuckMs=0）
+      // 被托住（几乎不动 0.15s）→ rest；支撑者 = 正在接触的螺丝/板（planck 接触）
       const v = body.getLinearVelocity(), still = Math.hypot(v.x, v.y) * PX < 25 && Math.abs(b.om) < 0.3 && !b.ghost;
       b.restT = still ? (b.restT || 0) + h : 0;
       if (b.restT > 0.15) {
         const sup = { s: [], p: [] };
         for (let e = body.getContactList(); e; e = e.next) { if (!e.contact.isTouching() || !e.contact.isEnabled()) continue; const u = e.other.getUserData(); if (!u) continue; if (u.k === 's') sup.s.push(u.sid); else if (u.k === 'p') sup.p.push(u.pi); }
-        b.rest = sup.s.length + sup.p.length > 0; b.sup = sup; if (b.rest && sup.s.length) b.everRest = true;
+        sup.s = [...new Set(sup.s)].sort((x, y) => x - y); sup.p = [...new Set(sup.p)].sort((x, y) => x - y);
+        b.rest = true; b.sup = sup; if (sup.s.length) b.everRest = true;
       } else if (!still) { b.rest = false; b.sup = null; }
-      // 只被其它板托住（没有螺丝支撑）超过 ppStuckMs → 只关闭它与板的碰撞（仍会被螺丝杆挡住）。紧密单层关卡里几乎每块下落板都会
-      // 先压在下方邻板的上边缘，若全都永久托住，整盘空孔很快被盖满而无解；用户反馈的“被下方螺丝挡住”则永久托住。
-      // 与求解器落点预测一致：螺丝支撑只有在质心 x 落在支撑螺丝水平范围 ±6px 内时才算“稳定托住”（永久）；否则同“只被板托住”
-      const stable = b.rest && b.sup && b.sup.s.length && (() => { const xs = b.sup.s.map(id => { const sb = W.screws.get(id); return sb ? sb.getPosition().x * PX : NaN; }).filter(x => x === x); return xs.length && b.cx >= Math.min(...xs) - 6 && b.cx <= Math.max(...xs) + 6; })();
-      if (b.rest && b.sup) b.stable = !!stable;
-      if (b.rest && b.sup && !stable && !b.ppGhost) { b.ppT = (b.ppT || 0) + h; if (b.ppT * 1000 > (S.ppStuckMs ?? 1200)) { b.ppGhost = true; b.rest = false; b.sup = null; W.ppGhosts = (W.ppGhosts || 0) + 1; for (let f = body.getFixtureList(); f; f = f.getNext()) f.setFilterData({ groupIndex: 0, categoryBits: 2, maskBits: 4 }); body.setAwake(true); } }
-      else if (!(b.rest && b.sup && !stable)) b.ppT = 0;
+      // 托住规则（实时与预测同一套）：接触到插着的螺丝 → 永久托住（直到支撑移走）；只被板托住（或悬空静止）超过 ppStuckMs（模拟时间）
+      //   → 只关闭它与板的碰撞（螺丝 category 4，仍被螺丝杆挡住）
+      const plateOnly = b.rest && b.sup && !b.sup.s.length;
+      if (plateOnly && !b.ppGhost) { b.ppT = (b.ppT || 0) + h; if (b.ppT * 1000 > (S.ppStuckMs ?? 1200)) { b.ppGhost = true; b.rest = false; b.sup = null; b.restT = 0; W.ppGhosts = (W.ppGhosts || 0) + 1; ppGhostFilter(body); body.setAwake(true); } }
+      else if (!plateOnly) b.ppT = 0;
       if (b.nudge && !b.ghost) b.ghostNow = true;
       if (!b.ghost && (b.ghostNow || ((S.collStuckMs ?? 0) > 0 && (b.tf - b.prog.t) * 1000 > S.collStuckMs))) {
         b.ghostNow = false; b.rest = false; b.sup = null; W.ghosts = (W.ghosts || 0) + 1;
-        // 卡住（被板/螺丝托住太久）：关闭它的碰撞，让它穿过障碍掉出画面——保证画面上不会永久留下逻辑上已掉落的板
-        b.ghost = true; for (let f = body.getFixtureList(); f; f = f.getNext()) f.setFilterData({ groupIndex: 0, categoryBits: 1, maskBits: 0 });
-        body.setAwake(true);
+        b.ghost = true; ghostFilter(body); body.setAwake(true);
       }
-      if (b.cy > 1750 || b.dy > 1600) { b.s = 'gone'; ev[pi] = 'gone'; W.pw.destroyBody(body); q.body = null; for (const k of [...W.pass.keys()]) if (k.split('|').includes('p' + pi)) W.pass.delete(k); }
+      // 已经在所有螺丝和其它板下方、还在往下掉 → 物理上再也碰不到任何东西：提前判定离开（画面上由 main.js 按抛体继续画完 b.out）
+      const out = v.y > 0 && b.cy - radOf(W, pi) > lowestOther(W, pi) + 4;
+      if (out) b.out = { vx: v.x * PX, vy: v.y * PX, om: b.om };
+      if (out || b.cy > 1750 || b.dy > 1600) { b.s = 'gone'; ev[pi] = 'gone'; W.pw.destroyBody(body); q.body = null; b.rest = false; b.sup = null; for (const k of [...W.pass.keys()]) if (k.split('|').includes('p' + pi)) W.pass.delete(k); }
     }
   });
   // 穿过对：两者分开（没有任何接触在重叠）后恢复碰撞
@@ -242,8 +256,71 @@ export function stepWorld(W, pins, pinW, dt, S, obst) {
   }
   return ev;
 }
+function radOf(W, pi) { const b = W.bodies[pi]; if (b._rad == null) { let r = 0; for (const [x, y] of W.L.plates[pi].poly) r = Math.max(r, Math.hypot(x - b.m.cx, y - b.m.cy)); b._rad = r; } return b._rad; }
+function lowestOther(W, pi) {
+  let m = -1e9; const R = (W.S.collShaftR ?? 6);
+  W.screws.forEach(sb => { const y = sb.getPosition().y * PX + R; if (y > m) m = y; });
+  W.bodies.forEach((b, pj) => { if (pj === pi || b.s === 'gone') return; const c = toWorld(b, b.m.cx, b.m.cy); m = Math.max(m, c[1] + radOf(W, pj)); });
+  return m;
+}
+function ppGhostFilter(body) { for (let f = body.getFixtureList(); f; f = f.getNext()) f.setFilterData({ groupIndex: 0, categoryBits: 2, maskBits: 4 }); }
+function ghostFilter(body) { for (let f = body.getFixtureList(); f; f = f.getNext()) f.setFilterData({ groupIndex: 0, categoryBits: 1, maskBits: 0 }); }
+// 单个板是否已有结论：固定 / 消失 / 摆动静止 / 被螺丝托住静止
+export function bodySettled(b) { return b.s === 'on' || b.s === 'gone' || (b.s === 'swing' && b.settled) || (b.s === 'fall' && b.rest && b.sup && b.sup.s.length > 0); }
+export function worldSettled(W) { return W.bodies.every(bodySettled); }
+// 兼容旧接口（collision-test 等）：每帧 applyPins + 按固定步长累加积分
+export function stepWorld(W, pins, pinW, dt, S, obst) {
+  const ev = applyPins(W, pins, pinW, S, obst);
+  W.acc = (W.acc || 0) + Math.min(dt, 0.05);
+  while (W.acc >= DT - 1e-9) { W.acc -= DT; stepFixed(W, S).forEach((e, i) => { if (e) ev[i] = e; }); }
+  return ev;
+}
+// ---------- 快照 / 恢复（实时与预测都从同一快照重建世界 → 同样的起点） ----------
+export function snapWorld(W) {
+  return {
+    bodies: W.bodies.map((b, pi) => {
+      const body = W.plates[pi].body, r = { s: b.s, ang: b.ang, dx: b.dx, dy: b.dy, cx: b.cx, cy: b.cy, n: b.n, lastPiv: b.lastPiv, pivW: b.pivW, piv: b.piv, ang0: b.ang0, posed: b.posed, ppGhost: !!b.ppGhost, ghost: !!b.ghost, rest: !!b.rest, sup: b.sup ? { s: b.sup.s.slice(), p: b.sup.p.slice() } : null, relAng: b.relAng, tf: b.tf || 0 };
+      if (body && b.s !== 'on') { const p = body.getPosition(), v = body.getLinearVelocity(); r.px = p.x; r.py = p.y; r.a = body.getAngle(); r.vx = v.x; r.vy = v.y; r.w = body.getAngularVelocity(); }
+      return r;
+    }),
+    pass: [...W.pass.keys()].sort(),
+  };
+}
+export function restoreWorld(L, bodies, S, snap, obst) {
+  snap.bodies.forEach((r, pi) => { const b = bodies[pi]; Object.assign(b, { s: r.s, ang: r.ang, dx: r.dx, dy: r.dy, cx: r.cx, cy: r.cy, n: r.n, lastPiv: r.lastPiv && r.lastPiv.slice(), pivW: r.pivW && r.pivW.slice(), piv: r.piv && r.piv.slice(), ang0: r.ang0, posed: r.posed, ppGhost: r.ppGhost, ghost: r.ghost, rest: r.rest, sup: r.sup ? { s: r.sup.s.slice(), p: r.sup.p.slice() } : null, relAng: r.relAng, tf: r.tf, restT: 0, settleT: 0, settled: false, ppT: 0, prog: { cy: r.cy, t: r.tf }, om: r.w || 0, nudge: false, ghostNow: false }); });
+  const W = createWorld(L, bodies, S);
+  W.bodies.forEach((b, pi) => {
+    const q = W.plates[pi], body = q.body;
+    if (b.s === 'gone') { W.pw.destroyBody(body); q.body = null; return; }
+    if (b.s === 'on') return;
+    const r = snap.bodies[pi];
+    body.setType('dynamic'); body.setTransform(Vec2(r.px, r.py), r.a); body.setLinearVelocity(Vec2(r.vx, r.vy)); body.setAngularVelocity(r.w);
+    if (b.s === 'swing') {
+      body.setAngularDamping(S.swingDamp || 0);
+      const lim = (S.swingMax ?? 17) * D2R;
+      q.joint = W.pw.createJoint(new RevoluteJoint({ enableLimit: lim < Math.PI, lowerAngle: -lim, upperAngle: lim, referenceAngle: b.ang0 }, W.ground, body, Vec2(b.pivW[0] / PX, b.pivW[1] / PX)));
+    } else {
+      body.setAngularDamping(S.angDamp ?? 1.5);
+      if (b.ghost) ghostFilter(body); else if (b.ppGhost) ppGhostFilter(body);
+    }
+    body.setAwake(true);
+  });
+  syncScrews(W, obst, S, true);
+  for (const k of snap.pass) W.pass.set(k, 0);
+  return W;
+}
+// 底板孔 (x,y) 附近（r px 内或轮廓内）有没有动态板（只用板位姿，不用 planck 接触 → 实时与预测判定一致）
+export function pointNearDynamic(L, bodies, x, y, r) {
+  return bodies.some((b, pi) => {
+    if (b.s === 'on' || b.s === 'gone') return false;
+    const [lx, ly] = toLocal(b, x, y), P = L.plates[pi].poly;
+    if (inPoly(lx, ly, P)) return true;
+    for (let i = 0, j = P.length - 1; i < P.length; j = i++) { const [ax, ay] = P[j], [bx, by] = P[i], dx = bx - ax, dy = by - ay, t = Math.max(0, Math.min(1, ((lx - ax) * dx + (ly - ay) * dy) / (dx * dx + dy * dy || 1))); if (Math.hypot(ax + t * dx - lx, ay + t * dy - ly) < r) return true; }
+    return false;
+  });
+}
 function bodyOf(W, id) { return id[0] === 'p' ? W.plates[+id.slice(1)].body : W.screws.get(+id.slice(1)); }
 // 当前是否有动态板在运动（自动通关在摆动板静止后再走下一步，以便逻辑同步实际停下的角度）
 // v1.7.2：刚开始下落、还不知道会掉出还是被托住的板（自动通关等它有结论再走下一步）
-export function fallUnsettled(W) { return W.bodies.some(b => b.s === 'fall' && !b.rest && !b.ghost && b.tf < 1.0 && b.cy < 1500); }
+export function fallUnsettled(W) { return W.bodies.some(b => b.s === 'fall' && !bodySettled(b)); }
 export function swingMoving(W) { return W.bodies.some(b => b.s === 'swing' && !b.settled); }

@@ -1,6 +1,6 @@
 // v1.3 导入透明图形生成关卡：alpha 剪影 → 平滑底板轮廓（支持内孔/多块）→ 按参考风格切分板块（细缝）→ 螺丝/空孔/隐藏孔 → 求解器验证可解
 import { smoothPoly, polyArea } from './geom.js';
-import { mulberry, solve, initState, pointInPoly, referenceLevel } from './level.js';
+import { mulberry, validate, initState, pointInPoly, referenceLevel } from './level.js';
 
 // ---- 等值线（marching squares，线性插值，闭合环）----
 export function marching(F, nx, ny) {
@@ -61,7 +61,7 @@ export function levelFromImage(img, S, seed0) {
   for (let attempt = 0; attempt < 24; attempt++) {
     const L = buildOnce(img, S, seed0 + attempt * 977, Math.floor(attempt / 4));
     if (!L) break;
-    if (L.plates.length && solve(L, initState(L), 12000)) { L.seed = seed0 + attempt * 977; L.attempts = attempt + 1; return L; }
+    if (L.plates.length && validate(L, S, S.genSolveMs ?? 2500, 12000)) { L.seed = seed0 + attempt * 977; L.attempts = attempt + 1; return L; }
   }
   const R = referenceLevel(); R.name = 'reference(fallback)'; return R;
 }

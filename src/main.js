@@ -1,6 +1,6 @@
 import { levelFromImage, defaultShapeCanvas } from './shapegen.js';
 import { newBody, toWorld as bodyToWorld } from './physics.js';
-import { createWorld, stepWorld, swingMoving, fallUnsettled } from './world.js';
+import { createSim, simTick, simEvent, stateFromBodies, visBlockedBy, solvePhys, forceFreeze, DT, LIVE_CAP } from './sim.js';
 import { referenceLevel, generateLevel, initState, holeUsable, screwFree, applyMove, pickHole, solve, done, setBlocking, platePins, coverInfo, liftOut, cancelLift, setPhysicsRules, setSwingAngle, poseFromXf, setPlatePose, poseDiff, setRest, clearRest, setShaftR, pointInPoly, ALIGN_TOL, EDGE_TOL } from './level.js';
 import { toLocal as bodyToLocal } from './physics.js';
 import { GROUPS, DEFS, loadSettings, saveSettings, migrate, exportJSON } from './settings.js';
@@ -15,7 +15,7 @@ let S = loadSettings();
 setBlocking(S.screwBlock);
 const cv = document.getElementById('stage'); let ctx = cv.getContext('2d');
 const sfx = new Sfx();
-let world = null, vHole = [], pend = [], L, st, plateVis, screwVis, sprites, bgCanvas, baseCanvas, active = null, lastVacated = -1, autoRunning = false, autoToken = 0, endShownAt = 0, finishedAt = 0;
+let sim = null, physAcc = 0, syncedSnap = null, vHole = [], pend = [], L, st, plateVis, screwVis, sprites, bgCanvas, baseCanvas, active = null, lastVacated = -1, autoRunning = false, autoToken = 0, endShownAt = 0, finishedAt = 0;
 const hand = { x: 820, y: 1450, press: 0, img: null, visible: false };
 const ripples = [];
 const now = () => performance.now();
@@ -59,7 +59,12 @@ function rebuild() {
   bgCanvas = document.createElement('canvas'); bgCanvas.width = cv.width; bgCanvas.height = cv.height;
   drawBackground(bgCanvas, S, cv.width, cv.height, view().k, bgImg);
   sprites = L.plates.map((p, i) => plateSprite(p, S, i, Math.max(1, dpr), p.holes.map(h => [L.holes[h].x, L.holes[h].y])));
-  if (!plateVis || plateVis.length !== L.plates.length) { plateVis = L.plates.map((p, i) => newBody(p.poly, [sprites[i].x + sprites[i].w / 2, sprites[i].y + sprites[i].h / 2], p.holes.map(h => [L.holes[h].x, L.holes[h].y]))); world = createWorld(L, plateVis, S); }
+  if (!plateVis || plateVis.length !== L.plates.length) {
+    // v1.7.2：物理 = sim.js 固定步长模拟（与求解器预测同一套代码）；板位姿原点 = 贴图中心（求解器模板也用它：p._C）
+    L.plates.forEach((p, i) => { p._C = [sprites[i].x + sprites[i].w / 2, sprites[i].y + sprites[i].h / 2]; }); L._simCache = null;
+    plateVis = L.plates.map((p, i) => newBody(p.poly, p._C, p.holes.map(h => [L.holes[h].x, L.holes[h].y])));
+    sim = createSim(L, S, plateVis); vHole = sim.vHole; physAcc = 0; syncedSnap = null; syncLogic();
+  }
   baseCanvas = document.createElement('canvas'); baseCanvas.width = Math.ceil(720 * dpr); baseCanvas.height = Math.ceil(1280 * dpr);
   const bc = baseCanvas.getContext('2d'); bc.scale(dpr, dpr); drawBase(bc, L, S);
 }
@@ -69,19 +74,9 @@ function rebuild() {
 // v1.5：可放螺丝的孔都在底板上，位置固定（板自己的孔随板移动，只用于绘制）
 function holeWorld(hi) { const h = L.holes[hi]; return [h.x, h.y]; }
 // 画面上此刻是否有板压住底板孔 hi：逻辑上已掉落/正在下落的板仍在画面里时，只要材料盖住该孔就不能放（下落板不提供任何孔位）
-function visBlocked(hi) {
-  const h = L.holes[hi];
-  return L.plates.some((p, pi) => {
-    const b = plateVis[pi]; if (b.s === 'gone' || !(st.removed.has(pi) || b.s === 'fall' || b.posed)) return false;
-    if (b.rest && st.rest.has(pi)) return false; // v1.7.2：被托住的板由逻辑 st.rest（实际位姿）判定遮挡，与 holeUsable/screwFree 一致
-    const [lx, ly] = b.posed ? bodyToLocal(b, h.x, h.y) : [h.x, h.y];
-    const covered = pointInPoly(lx, ly, p.poly) || p.poly.some((q, i) => { const r = p.poly[(i + 1) % p.poly.length], dx = r[0] - q[0], dy = r[1] - q[1], t = Math.max(0, Math.min(1, ((lx - q[0]) * dx + (ly - q[1]) * dy) / (dx * dx + dy * dy || 1))); return Math.hypot(q[0] + t * dx - lx, q[1] + t * dy - ly) < EDGE_TOL; });
-    if (!covered) return false;
-    if (!b.rest && (b.s === 'fall' || st.removed.has(pi))) return true; // v1.7.2：被托住的板自己对准的孔照常可点
-    // 摆动/有位姿的板：只有自己的孔（随板移动后）仍对准该底板孔才不挡
-    return !p.holes.some(k => { const w = bodyToWorld(b, L.holes[k].x, L.holes[k].y); return Math.hypot(w[0] - h.x, w[1] - h.y) <= ALIGN_TOL; });
-  });
-}
+function visBlocked(hi) { return visBlockedBy(L, plateVis, st, hi); }
+// 物理静止（且没有螺丝在途）时：逻辑状态 = 物理状态（释放/摆动位姿/被托住 + 支撑者）
+function syncLogic() { const d = stateFromBodies(L, plateVis, sim.vHole); st.removed = d.removed; st.swing = d.swing; st.rest = d.rest; st.npins = d.npins; syncedSnap = sim.snap; }
 function holeTargetable(hi) { return holeUsable(L, st, hi) && !visBlocked(hi); }
 function screwPos(si) { return holeWorld(st.screwHole[si]); }
 // 视觉固定：vHole[si] = 该螺丝视觉上“坐在”的孔（-1 = 不固定）。参考：拧走的螺丝在目标孔落座后 releaseDelay 才释放原板
@@ -93,7 +88,7 @@ function liftScrew(si) {
   liftOut(L, st, si);
   if (S.releaseAt === 'lift') schedPin(si, -1, t0 + S.liftDur + S.releaseDelay);
 }
-function dropBack(si) { cancelLift(st, si); pend = pend.filter(q => q.si !== si); vHole[si] = st.screwHole[si]; const v = screwVis[si]; v.anim = { k: 'down', t0: now(), a0: v.ang, l0: v.lift }; sfx.ratchet(S.screwInDur / 1000, S, false); }
+function dropBack(si) { cancelLift(st, si); pend = pend.filter(q => q.si !== si); simEvent(sim, si, st.screwHole[si]); const v = screwVis[si]; v.anim = { k: 'down', t0: now(), a0: v.ang, l0: v.lift }; sfx.ratchet(S.screwInDur / 1000, S, false); }
 function sendScrew(si, hi) {
   const v = screwVis[si], from = screwPos(si), to = [L.holes[hi].x, L.holes[hi].y];
   const vac = st.screwHole[si];
@@ -133,29 +128,20 @@ function step(t, dt) {
       if (p >= 1) { v.anim = null; v.sc = 1; }
     }
   });
-  pend = pend.filter(q => { if (t >= q.t) { vHole[q.si] = q.hi; return false; } return true; });
-  // v1.7.1：画面上不在静止位姿的板（摆动中/摆动后被重新固定）按物理实际位姿判定被哪些螺丝固定——与逻辑同一套覆盖/对准规则
-  const vsw = new Map(); plateVis.forEach((b, pi) => { if ((b.s === 'swing' || b.s === 'on') && b.posed && (Math.abs(b.ang) > 1e-4 || Math.abs(b.dx) > 0.05 || Math.abs(b.dy) > 0.05)) { const k = b.ang.toFixed(4) + ',' + b.dx.toFixed(2) + ',' + b.dy.toFixed(2); if (b._pk !== k) { b._pk = k; b._pose = poseFromXf(L, pi, b); } vsw.set(pi, b._pose); } });
-  const vst = { screwHole: vHole, removed: st.removed, lifted: null, swing: vsw };
-  const pinsOf = L.plates.map((_, pi) => platePins(L, vst, pi));
-  // v1.6/v1.7：仍插在底板里的螺丝（含正在拧入/放回的）是板的障碍；拧起/悬停/飞行中的不算
-  const obst = []; st.screwHole.forEach((h, si) => { const a = screwVis[si].anim; if (h < 0 || (a && (a.k === 'lift' || a.k === 'hover' || a.k === 'fly'))) return; const w = holeWorld(h); obst.push({ id: si, x: w[0], y: w[1] }); });
-  const evs = stepWorld(world, pinsOf.map(p => p.length), pinsOf.map(p => p.length === 1 ? holeWorld(vHole[p[0]]) : null), Math.min(dt, 0.05), S, obst);
-  evs.forEach(ev => { if (ev === 'fall') sfx.fall(S); });
-  // v1.7：摆动板静止后，逻辑位姿同步为物理实际停下的角度（被其它板/螺丝挡住时 < swingMax）
-  // v1.7.1：板静止后（摆动停下、或被重新固定）逻辑位姿同步为物理实际位姿（通用刚体变换，不再假设绕原支点转）
-  plateVis.forEach((b, pi) => { if (st.removed.has(pi) || !st.swing.has(pi)) return; if (((b.s === 'swing' && b.settled) || b.s === 'on') && poseDiff(L, st, pi, b) > 0.8) setPlatePose(L, st, pi, b); });
-  // v1.7.2：被托住的板 → 逻辑 st.rest（实际位姿 + 支撑螺丝/板）；不再被托住/出屏 → 清除
-  plateVis.forEach((b, pi) => {
-    if (b.s === 'fall' && b.rest && b.sup) {
-      const r = st.rest.get(pi), k = b.sup.s.slice().sort().join(',') + '/' + b.sup.p.slice().sort().join(',');
-      if (!r || r.key !== k || Math.abs(r.pose.ang - b.ang) > 0.01 || Math.hypot(r.pose.dx - b.dx, r.pose.dy - b.dy) > 0.8) { setRest(L, st, pi, b, b.sup); st.rest.get(pi).key = k; }
-    } else if (st.rest.has(pi)) clearRest(st, pi);
-  });
+  // 物理里已提前判定离开的板：画面上按抛体继续落出屏幕（不再参与碰撞）
+  plateVis.forEach(b => { if (!b.out || b.s !== 'gone') { b.out = null; return; } const o = b.out; o.vy += S.gravity * dt; b.dx += o.vx * dt; b.dy += o.vy * dt; b.ang += o.om * dt; if (b.dy > 1600 || b.C[1] + b.dy > 1750) b.out = null; });
+  pend = pend.filter(q => { if (t >= q.t) { simEvent(sim, q.si, q.hi); return false; } return true; });
+  // v1.7.2：固定步长 DT 累加器（与渲染帧率无关）；物理只在事件之后运行到全部静止，然后冻结（预测 == 实际）
+  if (!sim.frozen) {
+    physAcc += dt; let n = 0;
+    while (!sim.frozen && physAcc >= DT - 1e-9 && n++ < 40) { physAcc -= DT; simTick(sim).forEach(ev => { if (ev === 'fall') sfx.fall(S); }); }
+    if (!sim.frozen && sim.t > LIVE_CAP) forceFreeze(sim);
+  } else physAcc = 0;
+  if (sim.frozen && sim.snap !== syncedSnap && st.screwHole.every((h, si) => h === sim.vHole[si])) syncLogic();
   if (!finishedAt && done(L, st) && plateVis.every(p => p.s === 'gone')) { finishedAt = t; onFinish(); }
 }
 const busy = () => screwVis.some(v => v.anim && v.anim.k !== 'hover');
-const physBusy = () => world && (swingMoving(world) || fallUnsettled(world));
+const physBusy = () => sim && !sim.frozen;
 
 // ---------- 绘制 ----------
 const visOnG = (pi) => plateVis[pi].s === 'on' || plateVis[pi].s === 'swing';
@@ -183,7 +169,7 @@ function draw(t) {
     L.screws.forEach((_, si) => { if (screwLayer(si) === lay) drawS(si); });
   }
   plateVis.forEach((pv, pi) => {
-    if (pv.s !== 'fall') return; const sp = sprites[pi], p = L.plates[pi];
+    if (pv.s !== 'fall' && !pv.out) return; const sp = sprites[pi], p = L.plates[pi];
     ctx.save(); if (S.fallFade) ctx.globalAlpha = Math.max(0, 1 - pv.dy / 800);
     ctx.translate(pv.C[0] + pv.dx, pv.C[1] + pv.dy); ctx.rotate(pv.ang); ctx.translate(-pv.C[0], -pv.C[1]);
     ctx.drawImage(sp.c, sp.x, sp.y, sp.w, sp.h); ctx.restore();
@@ -296,7 +282,8 @@ async function autoSolve() {
   if (autoRunning) { autoToken++; autoRunning = false; hand.visible = false; updAutoBtn(); return; }
   if (finishedAt || done(L, st)) newGame();
   if (active !== null) { dropBack(active); active = null; }
-  const plan = solve(L, st); if (!plan) { status('当前局面无解，请重新开始'); return; }
+  const planNow = () => sim.frozen ? solvePhys(L, S, sim.snap, { timeMs: S.autoSolveMs ?? 12000 }) : null;
+  const plan = planNow(); if (!plan) { status('当前局面无解，请重新开始'); return; }
   const tok = ++autoToken; autoRunning = true; updAutoBtn(); sfx.resume();
   hand.x = 820; hand.y = 1450; hand.visible = true;
   if (S.autoRec && !rec) startRec();
@@ -304,30 +291,30 @@ async function autoSolve() {
   try {
     await wait(S.autoStartDelay, tok);
     // v1.7：物理决定画面（摆动板可能停在更小角度、下落板可能被托住一会儿）→ 每步前确认计划仍合法，否则从当前状态重新求解
-    let plan2 = plan.slice(), tries = 0; window.__autoStats = { replan: 0, abort: 0, dev: 0, nudge: 0 };
-    const legal = ([si, hi]) => st.screwHole[si] >= 0 && screwFree(L, st, si) && holeUsable(L, st, hi);
+    // v1.7.2：计划里每一步都带物理预测的结果快照；每步结束（物理静止）后与实际快照比较，不一致（不应发生）就从实际状态重新求解
+    let plan2 = plan.slice(), tries = 0, expect = null; window.__autoStats = { replan: 0, abort: 0, dev: 0, nudge: 0, mispredict: 0, moves: 0 };
+    const legal = ([si, hi]) => st.screwHole[si] >= 0 && screwFree(L, st, si) && holeUsable(L, st, hi) && !visBlocked(hi) && !visBlocked(st.screwHole[si]);
     const waitUntil = async (f, ms) => { const tw = now(); while (!f() && now() - tw < ms) { if (tok !== autoToken) throw 'stop'; await new Promise(r => requestAnimationFrame(r)); } };
-    while (!done(L, st)) {
-      await waitIdle(tok); await waitUntil(() => !physBusy(), 1500);
+    while (!done(L, st) || !plateVis.every(b => b.s === 'gone')) {
+      await waitIdle(tok); await waitUntil(() => !physBusy(), (LIVE_CAP + 1) * 1000); if (sim.frozen && sim.snap !== syncedSnap) syncLogic();
+      if (expect && JSON.stringify(expect) !== JSON.stringify(sim.snap)) { window.__autoStats.mispredict++; plan2 = []; if (window.__DBGP) console.log('MISPREDICT', JSON.stringify(expect.bodies.map((r, i) => [i, r.s, +r.dx.toFixed(2), +r.dy.toFixed(2)]).filter((r, i) => JSON.stringify(expect.bodies[i]) !== JSON.stringify(sim.snap.bodies[i]))), JSON.stringify(sim.snap.bodies.map((r, i) => [i, r.s, +r.dx.toFixed(2), +r.dy.toFixed(2)]).filter((r, i) => JSON.stringify(expect.bodies[i]) !== JSON.stringify(sim.snap.bodies[i])))); }
+      expect = null;
+      if (done(L, st) && plateVis.every(b => b.s === 'gone')) break;
       if (!plan2.length || !legal(plan2[0])) {
-        plan2 = solve(L, st) || []; window.__autoStats.replan++;
-        if (!plan2.length) {
-          // v1.7.2 兜底：被托住的板让局面无解（支撑螺丝无处可放）→ 让一块被托住的板穿过掉出（记入 __autoStats.nudge，测试要求为 0）
-          if (tries >= 8 && st.rest.size) { const pi = [...st.rest.keys()][0]; if (window.__DBGN) console.log('NUDGE ' + JSON.stringify({ rest: [...st.rest].map(([k, r]) => [k, r.scr, r.pl, [...r.pose.cov]]), removed: [...st.removed], free: L.holes.map((_, k) => k).filter(k => holeUsable(L, st, k)), freeScrews: st.screwHole.map((h, si) => screwFree(L, st, si) ? si : -1).filter(x => x >= 0).length, onPlates: L.plates.map((p, i) => st.removed.has(i) ? null : [i, platePins(L, st, i)]).filter(Boolean) })); plateVis[pi].nudge = true; window.__autoStats.nudge++; tries = 0; await wait(600, tok); continue; }
-          if (++tries > 20) { status('当前局面无解，请重新开始'); break; } await wait(250, tok); continue;
-        }
+        plan2 = planNow() || []; window.__autoStats.replan++;
+        if (!plan2.length) { if (++tries > 3) { status('当前局面无解，请重新开始'); break; } await wait(250, tok); continue; }
       }
       tries = 0;
-      const [si, hi] = plan2.shift();
+      const [si, hi, exp] = plan2.shift(); expect = exp; window.__autoStats.moves++;
       await waitUntil(() => !visBlocked(st.screwHole[si]), 4000);
       const w0 = holeWorld(st.screwHole[si]), w1 = holeWorld(hi), h0 = { x: w0[0], y: w0[1] }, h1 = { x: w1[0], y: w1[1] };
       if (S.moveRule === 'tap2') {
         await tapWorld(h0.x, h0.y, tok); await waitIdle(tok); await wait(S.autoSelectGap, tok);
         await waitUntil(() => holeTargetable(hi), 4000);
         // 目标孔仍被画面上的板挡住：不要点（会落到旁边别的孔、偏离计划），把螺丝放回、重新规划
-        if (!holeTargetable(hi) || active !== si) { if (active !== null) await tapWorld(h0.x, h0.y, tok); window.__autoStats.abort++; plan2 = []; continue; }
+        if (!holeTargetable(hi) || active !== si) { if (active !== null) await tapWorld(h0.x, h0.y, tok); window.__autoStats.abort++; plan2 = []; expect = null; continue; }
         await tapWorld(h1.x, h1.y, tok);
-        if (st.screwHole[si] !== hi) window.__autoStats.dev++;
+        if (st.screwHole[si] !== hi) { window.__autoStats.dev++; expect = null; }
       } else {
         const save = S.moveRule; S.moveRule = 'tap2';
         await tapWorld(h0.x, h0.y, tok); await waitIdle(tok); await tapWorld(h1.x, h1.y, tok); S.moveRule = save;
@@ -464,6 +451,6 @@ document.getElementById('btnExport').onclick = () => { const a = document.create
 document.getElementById('btnImport').onclick = () => document.getElementById('importFile').click();
 document.getElementById('importFile').onchange = (e) => { const f = e.target.files[0]; if (!f) return; f.text().then(t => { S = migrate(JSON.parse(t)); saveSettings(S); buildPanel(); loadHand(); sfx.setBgm(S.bgm, S.bgmVol); newGame(); toast('已导入设置'); }).catch(() => toast('导入失败')); };
 document.getElementById('btnReset').onclick = () => { if (!confirm('恢复全部默认设置？')) return; S = { ...DEFS }; saveSettings(S); buildPanel(); loadHand(); newGame(); };
-window.__game = { holeWorld: (hi) => holeWorld(hi), holeTargetable: (hi) => holeTargetable(hi), visBlocked: (hi) => visBlocked(hi), view: () => view(), tapXY: (x, y) => { const v = view(); return tapAt(x * v.b + v.tx, y * v.b + v.ty); }, tapHole: (hi) => { const w = holeWorld(hi), v = view(); return tapAt(w[0] * v.b + v.tx, w[1] * v.b + v.ty); }, get vHole() { return vHole; }, doExportAE, doExport3D, aeRec, aeStart: () => recStart(), aeStop: () => aeStop(), aeActive: () => aeActive(), get aeLastRec() { return aeLastRec; }, get mediaRec() { return rec; }, autoSolve, newGame, get S() { return S; }, set(k, v) { S[k] = v; applyChange(k); buildPanel(); }, get st() { return st; }, get L() { return L; }, get plateVis() { return plateVis; }, get world() { return world; }, solveNow: () => solve(L, st), lvl: { screwFree, holeUsable, platePins, solve }, physBusy: () => physBusy(), get screwVis() { return screwVis; }, startRec, stopRec };
+window.__game = { holeWorld: (hi) => holeWorld(hi), holeTargetable: (hi) => holeTargetable(hi), visBlocked: (hi) => visBlocked(hi), view: () => view(), tapXY: (x, y) => { const v = view(); return tapAt(x * v.b + v.tx, y * v.b + v.ty); }, tapHole: (hi) => { const w = holeWorld(hi), v = view(); return tapAt(w[0] * v.b + v.tx, w[1] * v.b + v.ty); }, get vHole() { return vHole; }, doExportAE, doExport3D, aeRec, aeStart: () => recStart(), aeStop: () => aeStop(), aeActive: () => aeActive(), get aeLastRec() { return aeLastRec; }, get mediaRec() { return rec; }, autoSolve, newGame, get S() { return S; }, set(k, v) { S[k] = v; applyChange(k); buildPanel(); }, get st() { return st; }, get L() { return L; }, get plateVis() { return plateVis; }, get world() { return sim && sim.W; }, get sim() { return sim; }, solveNow: (o) => solvePhys(L, S, sim.snap, o || {}), lvl: { screwFree, holeUsable, platePins, solve }, physBusy: () => physBusy(), get screwVis() { return screwVis; }, startRec, stopRec };
 buildPanel(); loadHand(); newGame(); if (S.bgm) sfx.setBgm(S.bgm, S.bgmVol);
 requestAnimationFrame(loop);

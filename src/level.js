@@ -193,7 +193,9 @@ export function poseFromXf(L, pi, xf) {
   const sw = { ang: xf.ang, dx: xf.dx, dy: xf.dy, C: xf.C, hi: xf.hi ?? -1, xf: true };
   sw.poly = p.poly.map(([x, y]) => T(x, y)); sw.holes = p.holes.map(k => T(L.holes[k].x, L.holes[k].y));
   sw.al = new Set(); sw.cov = new Set(); sw.inn = new Set();
+  let bx0 = 1e9, by0 = 1e9, bx1 = -1e9, by1 = -1e9; for (const [x, y] of sw.poly) { if (x < bx0) bx0 = x; if (x > bx1) bx1 = x; if (y < by0) by0 = y; if (y > by1) by1 = y; }
   L.holes.forEach((h, k) => {
+    if (h.x < bx0 - EDGE_TOL - ALIGN_TOL || h.x > bx1 + EDGE_TOL + ALIGN_TOL || h.y < by0 - EDGE_TOL - ALIGN_TOL || h.y > by1 + EDGE_TOL + ALIGN_TOL) return;
     if (sw.holes.some(([x, y]) => Math.hypot(x - h.x, y - h.y) <= ALIGN_TOL)) { sw.al.add(k); sw.cov.add(k); sw.inn.add(k); }
     else if (pointInPoly(h.x, h.y, sw.poly)) { sw.cov.add(k); sw.inn.add(k); } else if (distToPoly(h.x, h.y, sw.poly) < edgeTol(L, pi, k)) sw.cov.add(k);
   });
@@ -305,7 +307,8 @@ export function pickHole(L, st, si, rule, lastVacated, rnd = Math.random) {
 }
 
 // 自动求解：贪心 + 回溯。返回 [[screw, hole], ...] 或 null
-export function solve(L, st0, maxNodes = 20000, pred = true) {
+// 解析求解器（静态逻辑模型，logic-test 用）；游戏/生成器用 sim.js 的物理预测求解器（validateLevel / solvePhys）
+export function solve(L, st0, maxNodes = 20000, pred = false) {
   let nodes = 0;
   const clone = (s) => ({ removed: new Set(s.removed), screwHole: s.screwHole.slice(), swing: new Map(s.swing), rest: new Map(s.rest || []), pred, npins: s.npins ? s.npins.slice() : null });
   const seen = new Set(), maxDepth = L.screws.length * 6 + 20;
@@ -345,13 +348,17 @@ export function solve(L, st0, maxNodes = 20000, pred = true) {
 
 // ---------- 随机关卡生成（保证可解）----------
 export function mulberry(seed) { return () => { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+// v1.7.2：生成器用物理预测求解器校验可解（sim.js 注册；没注册时退回解析求解）
+let VALIDATE = (L, S, ms, n) => !!solve(L, initState(L), n || 6000);
+export function setValidator(f) { VALIDATE = f; }
+export function validate(L, S, ms, n) { return VALIDATE(L, S, ms, n); }
 export function generateLevel(o, seed) {
   for (let tries = 0; tries < 60; tries++) {
     // v1.7.2：落点预测下可能无解 → 每 6 次失败多加 1 个空孔（同图形关卡）
     const L = buildRandom({ ...o, emptyHoles: (o.emptyHoles || 2) + Math.floor(tries / 6) }, mulberry(seed + tries * 7919)); if (!L) continue;
     L.attempts = tries + 1;
     const st = initState(L);
-    if (solve(L, st, 6000)) return L;
+    if (VALIDATE(L, o, o.genSolveMs ?? 2500, 6000)) return L;
   }
   return referenceLevel();
 }

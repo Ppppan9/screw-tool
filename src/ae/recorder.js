@@ -24,7 +24,7 @@ export function createAERecorder(api) {
     const E = api.env(); if (E.L !== R.L) { R = null; return; }
     const t = Math.max(R.lastT + 1e-4 * (R.frames > 0), (now - R.t0) / 1000);
     // v1.4 板块样本 [t, 状态(0 原位静止/1 有位姿:摆动或下落/2 消失), dx, dy, 旋转(rad)]，位姿绕贴图中心（AE 锚点）
-    E.plateVis.forEach((pv, pi) => R.plates[pi].push([t, pv.s === 'gone' ? 2 : pv.posed ? 1 : 0, r3(pv.dx), r3(pv.dy), r3(pv.ang)]));
+    E.plateVis.forEach((pv, pi) => R.plates[pi].push([t, pv.s === 'gone' && !pv.out ? 2 : pv.posed ? 1 : 0, r3(pv.dx), r3(pv.dy), r3(pv.ang)]));
     E.screwVis.forEach((sv, si) => {
       if (sv.anim) { R.screws[si].push([t, 1, r3(sv.x), r3(sv.y), r3(sv.ang), r3(sv.lift), r3(sv.sc), 99]); return; }
       const h = E.L.holes[E.st.screwHole[si]], w = api.holeWorld(E.st.screwHole[si]);
