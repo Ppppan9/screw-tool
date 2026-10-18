@@ -108,3 +108,5 @@
   - 关卡：tools/trace_bigfoot.py（ref/bigfoot/ref_720.png = 广告截图游戏区 9:16 放大；深色描边连通区分割 + 共享区分水岭；板外扩 3px 且板间留 ≥3.5px）+ tools/bigfoot_groups.json（螺丝分组，21 板 25 螺丝；前掌左为双钉板）→ src/bigfoot_trace.json；level.js bigfootLevel()（脚跟板 openHoles = 黑色空孔，sim.js legalMoves 允许往 openHoles 放螺丝；FOOT_HIDDEN 米色板下 1 个隐藏孔，无它 120s 无解）。solvePhys 36 步 ~6–7s。
   - test:logic 通过（新增主题迁移 + 大脚掌可解 9 项）。test:autoall 新增第 6 例 reference{theme:classic}。
   - 下一步：autoall 经典款、npm test、test:ae、test:3d、test:norec、test:collision（逐个）；screenshots/bigfoot_ref_vs_tool.jpg；README；发布。
+  - 对比截图 screenshots/bigfoot_ref_vs_tool.jpg 复核：脚形/灰金属板深描边/银十字螺丝/脚跟黑孔/米色脚跟板/米白丝绸背景均一致，无需修改。
+  - test:autoall 6/6 通过（含 reference{theme:classic}：21 板 36 步 78.7s；abort/nudge/ghost/mispredict 均 0）。下一步 npm test → test:ae → test:3d → test:norec → test:collision → test:logic → 发布。
