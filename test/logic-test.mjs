@@ -83,7 +83,7 @@ import { createSim, solvePhys, validateLevel } from '../src/sim.js';
   const f = migrate(null); ok(f.theme === 'palm' && f.bgMode === 'image' && f.plateColor === DEFS.plateColor, '新存档：默认主题手掌款，外观 = 之前的默认值');
   const c = migrate({ version: 14, settings: { theme: 'classic', themeStore: { palm: { plateColor: '#ff0000' } }, plateColor: '#a8a3a4' } }); ok(c.theme === 'classic' && c.themeStore.palm.plateColor === '#ff0000', 'v14 存档：主题与分主题外观保留');
   ok(migrate({ version: 14, settings: { theme: 'xx' } }).theme === 'palm', '未知主题 → 手掌款');
-  { const a = migrate({ version: 14, settings: {} }), b2 = migrate({ version: 14, settings: { hideCursor: false } }); ok(SETTINGS_VERSION === 16 && a.hideCursor === true && b2.hideCursor === false, 'v16：hideCursor 保留；SETTINGS_VERSION=16（含 H5 试玩）');
+  { const a = migrate({ version: 14, settings: {} }), b2 = migrate({ version: 14, settings: { hideCursor: false } }); ok(SETTINGS_VERSION === 18 && a.hideCursor === true && b2.hideCursor === false, 'v18：hideCursor 保留；SETTINGS_VERSION=18（含 H5 机型/尺寸）');
   { const h = migrate({ version: 15, settings: {} }); ok(h.h5Format && h.h5CtaText === '立即下载' && String(h.h5Orientation) === '1', 'v16 H5 默认：format/cta/orientation'); } }
   const td = themeDefaults(DEFS, 'palm'); ok(THEME_KEYS.every(k => td[k] === DEFS[k]), '手掌款主题默认值 = 原默认值（数值完全不变）');
   ok(THEME_KEYS.every(k => k in DEFS), '主题键都在设置定义里'); }

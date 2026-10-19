@@ -10,7 +10,7 @@ import { THEMES, THEME_KEYS, themeDefaults } from './themes.js';
 import BG_REF from './bg_ref.jpg';
 import { createAERecorder } from './ae/recorder.js';
 import { export3D } from './export3d/export3d.js';
-import { exportH5PlayableFromPage, applyPlayableMode } from './h5/index.js';
+import { exportH5PlayableFromPage, applyPlayableMode, applyH5DevicePresetToSettings, markH5DeviceCustomIfSizeEdited, bindEditorDevicePreview } from './h5/index.js';
 const bgImg = new Image(); bgImg.src = BG_REF; bgImg.onload = () => { if (L) rebuild(); };
 
 let S = loadSettings();
@@ -448,6 +448,9 @@ function loop(t) {
 // ---------- 设置面板 ----------
 const REBUILD_KEYS = /^(canvas|bg|leaf|base|plate|outline|board|silk|linen|edgeHalo)/, NEWGAME_KEYS = /^(level|seed|emptyHoles|screwsPerPlate|gen|screwBlock|shape|part|seamW|edgeInset|minPlateArea|img|screwEdgeMin|layerOverlap|plateSize|plateCount|plateTint|baseFill)/;
 function applyChange(k, prev) {
+  if (k === 'h5DeviceW' || k === 'h5DeviceH') markH5DeviceCustomIfSizeEdited(S);
+  if (k === 'h5Device' || k === 'h5DeviceW' || k === 'h5DeviceH') { try { if (window.__h5EditorDeviceFit) window.__h5EditorDeviceFit(); } catch (e) { } }
+
   if (k === 'theme') return setTheme(S.theme, prev);
   if (k === 'shapeImg' && S.shapeImg) S.level = 'image';
   saveSettings(S); setPhysicsRules({ swingMax: S.swingMax, releaseAt: S.releaseAt });
@@ -470,7 +473,7 @@ function buildPanel() {
         row.append(r, n); r.dataset.k = k;
       } else if (type === 'color') { const c = document.createElement('input'); c.type = 'color'; c.value = S[k]; c.oninput = () => { S[k] = c.value; applyChange(k); }; row.append(c); }
       else if (type === 'bool') { row.classList.add('t-switch'); const l = document.createElement('label'); l.className = 'switch'; l.innerHTML = `<input type="checkbox" class="switch-input" ${S[k] ? 'checked' : ''}><span class="slider"></span>`; l.querySelector('input').onchange = (e) => { S[k] = e.target.checked; applyChange(k); }; row.append(l); }
-      else if (type === 'select') { const s = document.createElement('select'); a.forEach(([v, t]) => { const o = document.createElement('option'); o.value = v; o.textContent = t; s.append(o); }); s.value = S[k]; s.onchange = () => { const prev = S[k]; S[k] = s.value; applyChange(k, prev); }; row.append(s); }
+      else if (type === 'select') { const s = document.createElement('select'); a.forEach(([v, t]) => { const o = document.createElement('option'); o.value = v; o.textContent = t; s.append(o); }); s.value = S[k]; s.onchange = () => { const prev = S[k]; S[k] = s.value; if (k === 'h5Device') { applyH5DevicePresetToSettings(S); buildPanel(); } applyChange(k, prev); }; row.append(s); }
       else if (type === 'text') { const t = document.createElement('input'); t.type = 'text'; t.value = S[k]; t.oninput = () => { S[k] = t.value; applyChange(k); }; row.append(t); }
       else if (type === 'button') { row.classList.add('t-btn'); const bt = document.createElement('button'); bt.id = 'btn' + k; bt.textContent = a; bt.onclick = () => Promise.resolve(PANEL_ACTIONS[def] && PANEL_ACTIONS[def]()).catch(e => { status('导出失败：' + e.message); console.error(e); }); row.append(bt); }
       else if (type === 'file') {
@@ -482,7 +485,7 @@ function buildPanel() {
       det.append(row);
     });
     if (title.startsWith('手指')) det.insertAdjacentHTML('beforeend', '<div class="tip">上传透明背景PNG（手+触控笔），用锚点X/Y标定笔尖在图片中的相对位置。默认无内置手图。</div>');
-    if (title.startsWith('导出 H5')) det.insertAdjacentHTML('beforeend', '<div class="tip">导出 ZIP 含所选渠道子目录（tiktok/google/mintegral/generic）。试玩包无设置面板，仅游戏画面+CTA；体积告警默认 5MB（three.js 工具体积较大时可能超限）。</div>');
+    if (title.startsWith('导出 H5')) det.insertAdjacentHTML('beforeend', '<div class="tip">预览与导出均按所选机型/自定义尺寸；选「自适应」才是全机型 contain/letterbox。指定机型时设计画幅锁定为该分辨率。</div>');
     body.append(det);
   });
 }
@@ -506,6 +509,7 @@ const __h5 = applyPlayableMode({
   onResize: () => { /* 2D canvas: CSS contain via __h5FitStage; buffer stays canvasW×canvasH */ },
 });
 if (__h5) { try { const panel = document.getElementById('panel'); if (panel) panel.style.display = 'none'; } catch (e) { } }
+if (!__h5) bindEditorDevicePreview(() => S);
 window.__game = { get hand() { return hand; }, buildOnce: (img, o, seed, ex) => buildOnce(img, o, seed, ex), levelFromImage: (img, o, seed) => levelFromImage(img, o || S, seed ?? S.shapeSeed), holeWorld: (hi) => holeWorld(hi), holeTargetable: (hi) => holeTargetable(hi), visBlocked: (hi) => visBlocked(hi), view: () => view(), tapXY: (x, y) => { const v = view(); return tapAt(x * v.b + v.tx, y * v.b + v.ty); }, tapHole: (hi) => { const w = holeWorld(hi), v = view(); return tapAt(w[0] * v.b + v.tx, w[1] * v.b + v.ty); }, get vHole() { return vHole; }, doExportAE, doExport3D, doExportH5, aeRec, aeStart: () => recStart(), aeStop: () => aeStop(), aeActive: () => aeActive(), get aeLastRec() { return aeLastRec; }, get mediaRec() { return rec; }, autoSolve, newGame, loadLevel: (Lnew) => { autoToken++; autoRunning = false; updAutoBtn(); startLevel(Lnew); }, get S() { return S; }, set(k, v) { const prev = S[k]; S[k] = v; applyChange(k, prev); buildPanel(); }, setTheme: (id) => setTheme(id, S.theme), themes: THEMES, get st() { return st; }, get L() { return L; }, get plateVis() { return plateVis; }, get world() { return sim && sim.W; }, get sim() { return sim; }, solveNow: (o) => solvePhys(L, S, sim.snap, o || {}), lvl: { screwFree, holeUsable, platePins, solve }, physBusy: () => physBusy(), get screwVis() { return screwVis; }, startRec, stopRec };
 buildPanel(); loadHand(); newGame(); if (S.bgm) sfx.setBgm(S.bgm, S.bgmVol);
 requestAnimationFrame(loop);

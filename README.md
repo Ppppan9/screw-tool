@@ -7,6 +7,9 @@
 - 在线版：https://ppppan9.github.io/screw-tool/ 、 https://game.mmhygame.xyz/screw/
 - 参考关卡按参考视频 2.93s 画面逐个描点（25 块板、29 颗螺丝、中心 1 个空孔 + 3 个被板盖住的隐藏底孔）。
 
+## v1.9.2：H5 预览机型/尺寸（预览+导出；adaptive=全机型）
+- 面板「预览机型」「预览宽度/高度」：指定机型时预览框与导出设计画幅锁定该分辨率；自适应则 contain/letterbox。设置版本 18。
+
 ## v1.9：导出 H5 试玩广告
 - 新增面板「导出 H5 试玩广告」：一键导出含 TikTok/Pangle、Google、Mintegral、Generic 渠道子目录的试玩 ZIP（无编辑器面板，仅游戏+CTA）；设置版本 16。`npm run test:h5`。
 
