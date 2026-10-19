@@ -22,7 +22,8 @@
     "test:3d:classic": "E3D=1 AE_THEME=classic AE_ZIP=/tmp/screw_ae_classic_3d.zip E3D_ZIP=/workspace/screw_3d_sample_classic.zip AE_OUT=/tmp/screw_ae_classic3d node test/ae-export.mjs && SNAP=/tmp/screw_ae_classic3d/snaps E3D_ZIP=/workspace/screw_3d_sample_classic.zip E3D_DIR=/tmp/screw_e3d_classic E3D_CMP=$PWD/screenshots/export3d_blender_compare_classic.jpg bash test/export3d-blender.sh",
     "test:foot": "esbuild test/_foot.mjs --bundle --platform=node --format=esm --loader:.jpg=dataurl --log-level=warning --outfile=/tmp/screw-foot.mjs && node /tmp/screw-foot.mjs",
     "test:theme": "node test/theme-test.mjs",
-    "test:cursor": "node test/cursor-test.mjs"
+    "test:cursor": "node test/cursor-test.mjs",
+    "test:h5": "node test/h5-export.mjs"
   },
   "repository": {
     "type": "git",

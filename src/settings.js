@@ -1,5 +1,5 @@
 // 设置定义：所有可调参数。版本号 + 迁移。
-export const SETTINGS_VERSION = 15;
+export const SETTINGS_VERSION = 16;
 export const STORE_KEY = 'screwTool.settings';
 // [key, 标签, 类型, 默认, min, max, step]  类型: range/color/bool/select/text/file
 export const GROUPS = [
@@ -206,6 +206,17 @@ export const GROUPS = [
     ['export3dHand', '包含手指（贴图平面；结束页是否显示仍按“结束页显示手指”）', 'bool', true],
     ['export3dScrew', '螺丝形式', 'select', 'mesh', [['mesh', '3D 网格（十字槽螺帽+螺杆）'], ['quad', '贴图四边形']]],
   ]],
+  ['导出 H5 试玩广告', [
+    ['_exportH5', '导出当前设置为自包含 H5 试玩（无编辑器面板，仅游戏+CTA）', 'button', 'exportH5', '⬇ 导出 H5 试玩 ZIP'],
+    ['h5Format', '渠道格式', 'select', 'tiktok,google,mintegral,generic', [['tiktok,google,mintegral,generic', '全部（TikTok+Google+Mintegral+Generic）'], ['tiktok,generic', 'TikTok + Generic'], ['tiktok', '仅 TikTok/Pangle'], ['google', '仅 Google Ads'], ['mintegral', '仅 Mintegral'], ['generic', '仅 Generic 离线']]],
+    ['h5Orientation', '试玩方向', 'select', '1', [['0', '双端 (0)'], ['1', '竖屏 (1)'], ['2', '横屏 (2)']]],
+    ['h5CtaText', 'CTA 按钮文案', 'text', '立即下载'],
+    ['h5StoreUrl', '应用商店 / 落地页 URL', 'text', 'https://play.google.com/store/apps/details?id=com.example.game'],
+    ['h5GameName', '游戏名（可选）', 'text', '打螺丝'],
+    ['h5Icon', '应用图标（可选，透明PNG）', 'file', ''],
+    ['h5MaxMb', '体积告警阈值(MB)', 'range', 5, 1, 20, 0.5],
+    ['h5AutoPlay', '打开试玩后自动通关演示', 'bool', true],
+  ]],
   ['结束页(End Card)', [
     ['endCard', '显示结束页', 'bool', false],
     ['endCardHand', '结束页显示手指（自动通关点按钮）', 'bool', false],
@@ -259,6 +270,7 @@ export function migrate(obj) {
   if (v < 14) { if (s.themeStore && (typeof s.themeStore !== 'object' || Array.isArray(s.themeStore))) delete s.themeStore; v = 14; }
   // v14 -> v15（v1.8.1）：新增 hideCursor（手指出现时隐藏鼠标，默认开）——只补默认
   if (v < 15) v = 15;
+  if (v < 16) v = 16; // v16：导出 H5 试玩广告
   const out = { ...DEFS, themeStore: {} };
   for (const k in DEFS) if (k in s && typeof s[k] === typeof DEFS[k]) out[k] = s[k];
   if (!['palm', 'classic'].includes(out.theme)) out.theme = 'palm';

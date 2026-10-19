@@ -10,6 +10,7 @@ import { THEMES, THEME_KEYS, themeDefaults } from './themes.js';
 import BG_REF from './bg_ref.jpg';
 import { createAERecorder } from './ae/recorder.js';
 import { export3D } from './export3d/export3d.js';
+import { exportH5PlayableFromPage, applyPlayableMode } from './h5/index.js';
 const bgImg = new Image(); bgImg.src = BG_REF; bgImg.onload = () => { if (L) rebuild(); };
 
 let S = loadSettings();
@@ -416,7 +417,8 @@ function resetTheme() {
 }
 // 参考关卡随主题换关；随机/图形关卡保留当前关卡，只换材质（板块贴图/螺丝/孔/底板/背景重画）
 function refreshTheme() { saveSettings(S); buildPanel(); if (S.level === 'reference') newGame(); else rebuild(); }
-const PANEL_ACTIONS = { resetTheme, aeToggle: () => aeActive() ? aeStopAndExport() : recStart(), aeExport: () => doExportAE(), export3d: () => doExport3D() };
+async function doExportH5() { try { return await exportH5PlayableFromPage({ toolId: 'screw-tool', S, status, toast }); } catch (e) { status('H5 导出失败：' + e.message); console.error(e); return null; } }
+const PANEL_ACTIONS = { resetTheme, aeToggle: () => aeActive() ? aeStopAndExport() : recStart(), aeExport: () => doExportAE(), export3d: () => doExport3D(), exportH5: () => doExportH5() };
 function recTailDone(t) { return finishedAt && t - finishedAt > (S.endCard ? S.endDelay + 400 : 0) + Math.max(800, S.tailSec * 1000); }
 function download(blob, name) { const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; a.textContent = `⬇ ${name} (${(blob.size / 1e6).toFixed(1)}MB)`; document.getElementById('recList').prepend(a); a.click(); }
 async function doExportAE(save = true, rec = curRec()) {
@@ -480,6 +482,7 @@ function buildPanel() {
       det.append(row);
     });
     if (title.startsWith('手指')) det.insertAdjacentHTML('beforeend', '<div class="tip">上传透明背景PNG（手+触控笔），用锚点X/Y标定笔尖在图片中的相对位置。默认无内置手图。</div>');
+    if (title.startsWith('导出 H5')) det.insertAdjacentHTML('beforeend', '<div class="tip">导出 ZIP 含所选渠道子目录（tiktok/google/mintegral/generic）。试玩包无设置面板，仅游戏画面+CTA；体积告警默认 5MB（three.js 工具体积较大时可能超限）。</div>');
     body.append(det);
   });
 }
@@ -497,6 +500,11 @@ document.getElementById('btnImport').onclick = () => document.getElementById('im
 document.getElementById('importFile').onchange = (e) => { const f = e.target.files[0]; if (!f) return; f.text().then(t => { S = migrate(JSON.parse(t)); saveSettings(S); buildPanel(); loadHand(); sfx.setBgm(S.bgm, S.bgmVol); newGame(); toast('已导入设置'); }).catch(() => toast('导入失败')); };
 document.getElementById('btnReset').onclick = () => { if (!confirm('恢复全部默认设置？')) return; S = { ...DEFS, ...themeDefaults(DEFS, S.theme), theme: S.theme, themeStore: {} }; saveSettings(S); buildPanel(); loadHand(); newGame(); }; // 恢复默认 = 当前主题的默认值（不切回手掌款），清空各主题保存的外观改动
 globalThis.__genStats = genStats;
-window.__game = { get hand() { return hand; }, buildOnce: (img, o, seed, ex) => buildOnce(img, o, seed, ex), levelFromImage: (img, o, seed) => levelFromImage(img, o || S, seed ?? S.shapeSeed), holeWorld: (hi) => holeWorld(hi), holeTargetable: (hi) => holeTargetable(hi), visBlocked: (hi) => visBlocked(hi), view: () => view(), tapXY: (x, y) => { const v = view(); return tapAt(x * v.b + v.tx, y * v.b + v.ty); }, tapHole: (hi) => { const w = holeWorld(hi), v = view(); return tapAt(w[0] * v.b + v.tx, w[1] * v.b + v.ty); }, get vHole() { return vHole; }, doExportAE, doExport3D, aeRec, aeStart: () => recStart(), aeStop: () => aeStop(), aeActive: () => aeActive(), get aeLastRec() { return aeLastRec; }, get mediaRec() { return rec; }, autoSolve, newGame, loadLevel: (Lnew) => { autoToken++; autoRunning = false; updAutoBtn(); startLevel(Lnew); }, get S() { return S; }, set(k, v) { const prev = S[k]; S[k] = v; applyChange(k, prev); buildPanel(); }, setTheme: (id) => setTheme(id, S.theme), themes: THEMES, get st() { return st; }, get L() { return L; }, get plateVis() { return plateVis; }, get world() { return sim && sim.W; }, get sim() { return sim; }, solveNow: (o) => solvePhys(L, S, sim.snap, o || {}), lvl: { screwFree, holeUsable, platePins, solve }, physBusy: () => physBusy(), get screwVis() { return screwVis; }, startRec, stopRec };
+const __h5 = applyPlayableMode({
+  applySettings: (ps) => { Object.assign(S, ps); saveSettings(S); },
+  autoPlay: () => { try { autoSolve(); } catch (e) { } },
+});
+if (__h5) { try { const panel = document.getElementById('panel'); if (panel) panel.style.display = 'none'; } catch (e) { } }
+window.__game = { get hand() { return hand; }, buildOnce: (img, o, seed, ex) => buildOnce(img, o, seed, ex), levelFromImage: (img, o, seed) => levelFromImage(img, o || S, seed ?? S.shapeSeed), holeWorld: (hi) => holeWorld(hi), holeTargetable: (hi) => holeTargetable(hi), visBlocked: (hi) => visBlocked(hi), view: () => view(), tapXY: (x, y) => { const v = view(); return tapAt(x * v.b + v.tx, y * v.b + v.ty); }, tapHole: (hi) => { const w = holeWorld(hi), v = view(); return tapAt(w[0] * v.b + v.tx, w[1] * v.b + v.ty); }, get vHole() { return vHole; }, doExportAE, doExport3D, doExportH5, aeRec, aeStart: () => recStart(), aeStop: () => aeStop(), aeActive: () => aeActive(), get aeLastRec() { return aeLastRec; }, get mediaRec() { return rec; }, autoSolve, newGame, loadLevel: (Lnew) => { autoToken++; autoRunning = false; updAutoBtn(); startLevel(Lnew); }, get S() { return S; }, set(k, v) { const prev = S[k]; S[k] = v; applyChange(k, prev); buildPanel(); }, setTheme: (id) => setTheme(id, S.theme), themes: THEMES, get st() { return st; }, get L() { return L; }, get plateVis() { return plateVis; }, get world() { return sim && sim.W; }, get sim() { return sim; }, solveNow: (o) => solvePhys(L, S, sim.snap, o || {}), lvl: { screwFree, holeUsable, platePins, solve }, physBusy: () => physBusy(), get screwVis() { return screwVis; }, startRec, stopRec };
 buildPanel(); loadHand(); newGame(); if (S.bgm) sfx.setBgm(S.bgm, S.bgmVol);
 requestAnimationFrame(loop);
