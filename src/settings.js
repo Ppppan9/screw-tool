@@ -1,5 +1,5 @@
 // 设置定义：所有可调参数。版本号 + 迁移。
-export const SETTINGS_VERSION = 16;
+export const SETTINGS_VERSION = 17;
 export const STORE_KEY = 'screwTool.settings';
 // [key, 标签, 类型, 默认, min, max, step]  类型: range/color/bool/select/text/file
 export const GROUPS = [
@@ -271,6 +271,7 @@ export function migrate(obj) {
   // v14 -> v15（v1.8.1）：新增 hideCursor（手指出现时隐藏鼠标，默认开）——只补默认
   if (v < 15) v = 15;
   if (v < 16) v = 16; // v16：导出 H5 试玩广告
+  if (v < 17) v = 17; // v17：H5 多尺寸自适应（壳层）
   const out = { ...DEFS, themeStore: {} };
   for (const k in DEFS) if (k in s && typeof s[k] === typeof DEFS[k]) out[k] = s[k];
   if (!['palm', 'classic'].includes(out.theme)) out.theme = 'palm';
