@@ -10,7 +10,9 @@ import { THEMES, THEME_KEYS, themeDefaults } from './themes.js';
 import BG_REF from './bg_ref.jpg';
 import { createAERecorder } from './ae/recorder.js';
 import { export3D } from './export3d/export3d.js';
-import { exportH5PlayableFromPage, applyPlayableMode, applyH5DevicePresetToSettings, markH5DeviceCustomIfSizeEdited, bindEditorDevicePreview } from './h5/index.js';
+import { exportH5PlayableFromPage, applyPlayableMode, isPlayableNoHand, applyH5DevicePresetToSettings, markH5DeviceCustomIfSizeEdited, bindEditorDevicePreview } from './h5/index.js';
+// H5 试玩由玩家自己玩：导出包内不画手指 / 不隐藏鼠标（编辑器、录制、AE/3D 导出不受影响）
+const H5_NO_HAND = isPlayableNoHand();
 const bgImg = new Image(); bgImg.src = BG_REF; bgImg.onload = () => { if (L) rebuild(); };
 
 let S = loadSettings();
@@ -242,11 +244,12 @@ function drawEnd(t, pv, noDim) {
 // 手指大小 = 画面宽比例（与麻将工具 handSize 一致）
 function handScaleOf() { return hand.img ? S.handSize * 720 / hand.img.width : 1; }
 const handHiddenByEnd = () => !S.endCardHand && endAlpha(now()) > 0;
-function handState() { if (!S.handShow || !hand.img || !hand.visible || handHiddenByEnd()) return null; return { x: hand.x, y: hand.y, s: handScaleOf() * (1 - S.pressDepth * hand.press) }; }
+function handState() { if (H5_NO_HAND || !S.handShow || !hand.img || !hand.visible || handHiddenByEnd()) return null; return { x: hand.x, y: hand.y, s: handScaleOf() * (1 - S.pressDepth * hand.press) }; }
 // 手指出现在画面上时隐藏系统鼠标（与麻将/咖啡统一：hideCursor）。手动：手指跟随指针（指尖锚点 = 指针位置）；自动通关：手指可见时
-function handCursorHidden() { return !!(S.hideCursor && S.handShow && hand.img && !handHiddenByEnd() && (!autoRunning || hand.visible)); }
+function handCursorHidden() { return !H5_NO_HAND && !!(S.hideCursor && S.handShow && hand.img && !handHiddenByEnd() && (!autoRunning || hand.visible)); }
 function updateCursor() { const c = handCursorHidden() ? 'none' : 'pointer'; if (cv.style.cursor !== c) cv.style.cursor = c; }
 function drawHand() {
+  if (H5_NO_HAND) return;
   if (!S.handShow || !hand.img || !hand.visible || handHiddenByEnd()) return;
   const im = hand.img, sc = handScaleOf() * (1 - S.pressDepth * hand.press), w = im.width * sc, h = im.height * sc;
   ctx.drawImage(im, hand.x - S.handAnchorX * w, hand.y - S.handAnchorY * h, w, h);
@@ -504,8 +507,10 @@ document.getElementById('importFile').onchange = (e) => { const f = e.target.fil
 document.getElementById('btnReset').onclick = () => { if (!confirm('恢复全部默认设置？')) return; S = { ...DEFS, ...themeDefaults(DEFS, S.theme), theme: S.theme, themeStore: {} }; saveSettings(S); buildPanel(); loadHand(); newGame(); }; // 恢复默认 = 当前主题的默认值（不切回手掌款），清空各主题保存的外观改动
 globalThis.__genStats = genStats;
 const __h5 = applyPlayableMode({
-  applySettings: (ps) => { Object.assign(S, ps); saveSettings(S); },
+  applySettings: (ps) => { Object.assign(S, ps); /* playable: don't persist baked settings to localStorage */ },
   autoPlay: () => { try { autoSolve(); } catch (e) { } },
+  state: () => { try { return JSON.stringify([st, active]); } catch (e) { return ''; } },
+  isEnded: () => { try { return !!window.__finished; } catch (e) { return false; } },
   onResize: () => { /* 2D canvas: CSS contain via __h5FitStage; buffer stays canvasW×canvasH */ },
 });
 if (__h5) { try { const panel = document.getElementById('panel'); if (panel) panel.style.display = 'none'; } catch (e) { } }
